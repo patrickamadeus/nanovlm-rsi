@@ -91,7 +91,8 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
 
         update = updater.propose(batch)
         if update is None:
-            trace.log_update(iter=it, committed=False, gate_enabled=cfg.gate_enabled, reason="no usable signal")
+            trace.log_update(iter=it, committed=False, gate_enabled=cfg.gate_enabled, reason="no usable signal",
+                             proposer_stats=getattr(propose, "last_stats", None))
             continue
         result = gate(update, updater, env, cfg, eval_fn=make_eval_fn(policy, env, trace, cfg, store))
         trace.log_update(iter=it, carrier=update.carrier, role=update.role, horizon=update.horizon,

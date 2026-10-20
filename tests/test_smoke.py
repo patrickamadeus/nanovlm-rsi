@@ -63,8 +63,8 @@ def test_composite_verifier_logs_judge_agreement_in_the_loop(tmp_path):
 def test_self_proposer_runs_in_the_loop_and_logs_its_stats(tmp_path):
     rsi(small(tmp_path, proposer="self", gate_enabled=False, tasks_per_iter=4),
         policy=ScriptedPolicy(cycle(["ACT: say_3"])))
-    committed = [u for u in Trace(str(tmp_path)).records("update") if u.get("carrier")]
-    assert committed and all("frontier_frac" in u["proposer_stats"] for u in committed)
+    updates = Trace(str(tmp_path)).records("update")
+    assert updates and all("frontier_frac" in u["proposer_stats"] for u in updates)   # every iteration, update or not
 
 
 def test_weights_carrier_closes_the_loop_with_the_real_tiny_policy(tmp_path):
