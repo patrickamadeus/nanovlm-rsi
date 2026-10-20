@@ -21,6 +21,7 @@ class LoopConfig:
     update_rule: str = "memory"    # the carrier: "weights" | "memory" | "scaffold" — exactly one per run
     proposer: str = "fixed"        # "fixed" | "self"
     env: str = "static"            # "static" | "craftax"
+    verifier: str = "outcome"      # "outcome" | "judge" | "composite"
     env_seed: int = 0              # fixes the frozen held-out set
     heldout_n: int = 200
     gate_n: int = 32               # tasks drawn from the gate split per accept/reject decision
