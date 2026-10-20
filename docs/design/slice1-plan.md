@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, PyTorch, numpy, transformers, pillow, safetensors, pytest.
 
-**Spec:** `docs/superpowers/specs/2026-10-20-nanovlm-rsi-design.md`
+**Spec:** `docs/design/spec.md`
 
 ## Global Constraints
 

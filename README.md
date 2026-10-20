@@ -103,4 +103,4 @@ operations, the proposer and the gate are all written here.
 - The gate turns a five-condition operational bar for durable self-improvement into code: the system
   proposed the update, it survives a reset, it gains on held-out data at matched cost, its feedback would
   exist at deployment, and it doesn't regress.
-- Design and rationale: `docs/superpowers/specs/2026-10-20-nanovlm-rsi-design.md`.
+- Design and rationale: `docs/design/spec.md`.

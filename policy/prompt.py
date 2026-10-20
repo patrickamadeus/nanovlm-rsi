@@ -3,7 +3,10 @@
 Keeping it a file is what lets update/scaffold.py rewrite it as a diffable,
 versioned, revertible artifact instead of editing Python.
 """
+import os
 import re
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 REQUIRED_SLOTS = ("{system}", "{actions}", "{memory}", "{task}")
 ACT_RE = re.compile(r"^\s*ACT:\s*(\S+)", re.MULTILINE)
@@ -14,6 +17,9 @@ class ScaffoldContractError(ValueError):
 
 
 def load_scaffold(path: str) -> str:
+    """A relative path that doesn't exist from the current directory is resolved against the repo root."""
+    if not os.path.isabs(path) and not os.path.exists(path):
+        path = os.path.join(ROOT, path)
     with open(path) as f:
         return f.read()
 

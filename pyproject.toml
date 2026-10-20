@@ -1,15 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "nanovlm-rsi"
 version = "0.1.0"
-description = "The simplest harness for multimodal recursive self-improvement research."
+description = "The simplest harness for multimodal recursive self-improvement research, in plain PyTorch."
+readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["torch", "numpy", "transformers", "pillow", "safetensors"]
+license = { text = "Apache-2.0" }
+dependencies = ["torch", "numpy", "transformers>=4.50", "pillow", "safetensors"]
 
 [project.optional-dependencies]
 craftax = ["jax", "craftax"]
 bench = ["datasets"]
+plot = ["matplotlib"]
 wandb = ["wandb"]
-dev = ["pytest"]
+dev = ["pytest", "matplotlib"]
+
+[tool.setuptools]
+py-modules = ["config", "rsi", "rollout", "evaluate", "play", "propose", "verify"]
+packages = ["envs", "policy", "infra", "update", "evals", "tools"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
