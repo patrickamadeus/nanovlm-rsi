@@ -29,6 +29,7 @@ def achievement_reward(before: np.ndarray, after: np.ndarray, goal_index: int) -
 
 
 class CraftaxEnv(SeededTasks, Env):
+    families = {"craftax_achieve"}
     _jax_env = _reset = _step = None             # compiled once per process, shared by every instance
 
     def __init__(self, env_seed: int = 0, heldout_n: int = 200, budget: int = 64):

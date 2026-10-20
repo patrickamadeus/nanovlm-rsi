@@ -56,7 +56,7 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
         from policy.vlm import Policy
         policy = Policy(cfg.policy)
     env      = make_env(cfg)
-    verifier = make_verifier(cfg.verifier, cfg)
+    verifier = make_verifier(cfg.verifier, cfg, env)
     updater  = make_updater(cfg.update_rule, policy, cfg)     # weights | memory | scaffold
     propose  = make_proposer(cfg.proposer, env, cfg)
     trace    = Trace(cfg.run_dir)
@@ -78,7 +78,8 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
                 scored = verifier.score(traj)
                 trace.log_rollout(**rollout_record(traj, skill_ids, scored.verdict_source,
                                                    extra_seconds=recall_s if g == 0 else 0.0),
-                                  flags=scored.flags, iter=it)
+                                  flags=scored.flags, iter=it, judge_verdict=scored.judge_verdict,
+                                  judge_tokens=scored.judge_tokens)
                 if store is not None:                         # use-attribution: was the skill there when it worked?
                     store.note_use(skill_ids, succeeded=scored.reward >= 1.0)
                 batch.append(scored)

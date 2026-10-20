@@ -44,7 +44,8 @@ class LoopConfig:
     mem_top_k: int = 3
     mem_max_size: int = 500
     mem_dedupe_sim: float = 0.95
-    judge_sample_rate: float = 0.1
+    judge_sample_rate: float = 0.1 # composite verifier: how often the judge shadows ground truth
+    judge_model_id: str = "HuggingFaceTB/SmolVLM-500M-Instruct"   # a different model from the policy, on purpose
     run_dir: str = "runs/dev"
     resume: bool = False           # reusing a non-empty run_dir is refused unless resuming on purpose
     seed: int = 0

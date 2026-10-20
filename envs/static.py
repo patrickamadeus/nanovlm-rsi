@@ -39,6 +39,7 @@ def render(cells: dict[tuple[int, int], tuple[int, int, int]], agent: tuple[int,
 
 
 class StaticEnv(SeededTasks, Env):
+    families = {"count_objects", "gather_order"}     # goals with a programmatic checker
     def __init__(self, env_seed: int = 0, heldout_n: int = 200):
         self.env_seed, self.heldout_n = env_seed, heldout_n
         self._task: Task | None = None

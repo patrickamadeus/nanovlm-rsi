@@ -38,6 +38,6 @@ def test_flags_noop_spam_from_parse_fails():
     assert "noop_spam" in s.flags
 
 
-def test_judge_verifier_not_yet_available():
-    with pytest.raises(NotImplementedError, match="Slice 4"):
-        make_verifier("judge", LoopConfig())
+def test_unknown_verifier_is_rejected():
+    with pytest.raises(ValueError):
+        make_verifier("oracle", LoopConfig())

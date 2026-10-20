@@ -52,7 +52,7 @@ def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str =
         if done:
             break
     return Trajectory(task, steps, total, env_steps, parse_fails, tokens_out, tokens_in, model_s,
-                      (time.perf_counter() - t_start) * 1000)
+                      (time.perf_counter() - t_start) * 1000, obs.rgb)
 
 
 def recall(store, env: Env, task: Task, k: int) -> tuple[str, list[str], float]:

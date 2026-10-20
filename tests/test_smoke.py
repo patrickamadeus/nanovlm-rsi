@@ -49,3 +49,12 @@ def test_run_record_captures_provenance(tmp_path):
     rec = Trace(str(tmp_path)).records("run")[0]
     assert rec["carrier"] == "memory" and rec["proposer"] == "fixed"
     assert rec["cfg_hash"] and "git_sha" in rec
+
+
+def test_composite_verifier_logs_judge_agreement_in_the_loop(tmp_path):
+    cfg = small(tmp_path, iters=1, tasks_per_iter=1, verifier="composite", judge_sample_rate=1.0,
+                policy=PolicyConfig(tiny=True, device="cpu", dtype="float32"))
+    rsi(cfg, policy=ScriptedPolicy(cycle(["ACT: say_3"])))
+    train = [r for r in Trace(str(tmp_path)).records("rollout") if r.get("iter") is not None]
+    assert train and all(r["verdict_source"] == "outcome" and r["judge_verdict"] in (0.0, 1.0) for r in train)
+    assert Trace(str(tmp_path)).cumulative_cost.judge_tokens > 0
