@@ -25,6 +25,13 @@ class RolloutStep:
     prompt_tokens: int
 
 
+def configure_images(processor, side: int) -> None:
+    """One tile of at most `side` px, never upscaled-and-split: env frames are small and the default is for documents."""
+    ip = processor.image_processor
+    ip.do_image_splitting = False
+    ip.size = ip.max_image_size = {"longest_edge": side}
+
+
 def _tiny(cfg, processor):
     """Shrink every dimension so the whole loop runs on CPU in seconds, through the same code as the real model."""
     v, t = cfg.vision_config, cfg.text_config
@@ -45,6 +52,8 @@ class Policy:
         self.device = ("cuda" if torch.cuda.is_available() else "cpu") if cfg.device == "auto" else cfg.device
         self.processor = AutoProcessor.from_pretrained(cfg.model_id)
         dtype = getattr(torch, cfg.dtype)
+        if cfg.image_side and not cfg.tiny:
+            configure_images(self.processor, cfg.image_side)
         if cfg.tiny:
             self.model = _tiny(AutoConfig.from_pretrained(cfg.model_id), self.processor).to(dtype)
         else:
@@ -119,7 +128,7 @@ class Policy:
         # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the
         # KV-cache decode drifts from a full pass by up to ~0.27 nats, which would put GRPO ratios
         # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.
-        lp = self.logprobs(prompt, images, ids, prefix=prefix).float()
+        lp = self._score(inputs, ids).float()
         text = self.processor.tokenizer.decode(ids, skip_special_tokens=True)
         prefix = self.cfg.response_prefix if prefix is None else prefix
         if prefix:                     # the prefilled tokens are prompt, not policy output, but parsing needs them
@@ -129,7 +138,10 @@ class Policy:
     def logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int],
                  prefix: str | None = None) -> torch.Tensor:
         """Re-score an existing completion under current params; differentiable when params require grad."""
-        inputs = self._inputs(prompt, images, prefix=prefix)
+        return self._score(self._inputs(prompt, images, prefix=prefix), token_ids)
+
+    def _score(self, inputs: dict, token_ids: list[int]) -> torch.Tensor:
+        inputs = dict(inputs)
         n_prompt = inputs["input_ids"].shape[1]
         completion = torch.tensor([token_ids], device=self.device)
         inputs["input_ids"] = torch.cat([inputs["input_ids"], completion], dim=1)

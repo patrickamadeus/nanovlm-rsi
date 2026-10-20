@@ -75,3 +75,21 @@ def test_generation_stops_at_the_end_of_the_action_line(tiny):
             assert nl not in ids[:-1]          # nothing is generated past the first newline
     finally:
         tiny.cfg.max_new_tokens = 8
+
+
+def test_small_env_images_are_one_tile_not_upscaled_and_split():
+    from transformers import AutoProcessor
+    from policy.vlm import configure_images
+    proc = AutoProcessor.from_pretrained(PolicyConfig().model_id)
+    configure_images(proc, 512)
+    from PIL import Image
+    x = proc(text=["<image>hi"], images=[[Image.fromarray(np.zeros((64, 64, 3), np.uint8))]], return_tensors="pt")
+    assert x["pixel_values"].shape[1] == 1          # the processor default was 17 tiles for a 64px image
+
+
+def test_act_and_rescore_share_one_processed_input(tiny, monkeypatch):
+    calls = []
+    real = tiny._inputs
+    monkeypatch.setattr(tiny, "_inputs", lambda *a, **k: calls.append(1) or real(*a, **k))
+    tiny.act("hello", IMG)
+    assert len(calls) == 1

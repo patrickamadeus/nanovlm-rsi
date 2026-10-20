@@ -11,6 +11,8 @@ class PolicyConfig:
     dtype: str = "bfloat16"
     device: str = "auto"           # "auto" picks cuda when available
     scaffold_path: str = "scaffolds/v0.txt"
+    image_side: int = 512          # longest image edge, one tile: the processor default upscales a 64px frame to
+                                   # 2048 and splits it into 17 tiles (1,233 tokens). 0 keeps the model default
     stop_at_newline: bool = True   # the action is one line; generating past it is wasted compute and noisy GRPO tokens
     response_prefix: str = "ACT:"  # prefilled assistant turn: 39/40 parseable vs 4/40 without, for a 256M model.
                                    # "" restores free reasoning before the ACT: line, for larger policies
