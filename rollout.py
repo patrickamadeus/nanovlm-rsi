@@ -19,12 +19,14 @@ def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str =
         action = parse_action(gen.text, env.actions)
         if action is None:     # a failed parse is a wasted turn, never an env call
             parse_fails += 1
-            steps.append({"action": None, "reward": 0.0, "shaping": PARSE_FAIL_SHAPING, "text": gen.text})
+            steps.append({"action": None, "reward": 0.0, "shaping": PARSE_FAIL_SHAPING, "text": gen.text,
+                          "obs_text": obs.text})
             continue
+        seen = obs.text
         obs, reward, done, _ = env.step(action)
         env_steps += 1
         total += reward
-        steps.append({"action": action, "reward": reward, "shaping": 0.0, "text": gen.text})
+        steps.append({"action": action, "reward": reward, "shaping": 0.0, "text": gen.text, "obs_text": seen})
         if done:
             break
     return Trajectory(task, steps, total, env_steps, parse_fails, tokens_out)
