@@ -1,0 +1,6 @@
+{system}
+Actions available: {actions}
+{memory}
+Observation: <image>
+{task}
+Think briefly, then emit one line: ACT: <action>
