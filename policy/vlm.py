@@ -50,9 +50,23 @@ class Policy:
             self.model = AutoModelForImageTextToText.from_pretrained(cfg.model_id, dtype=dtype)
         self.model.to(self.device).eval().requires_grad_(False)   # nothing trains unless a carrier opts in
 
-    def _inputs(self, prompt: str, images: list[np.ndarray]) -> dict:
-        missing = len(images) - prompt.count(IMAGE)
-        text = IMAGE * max(missing, 0) + prompt
+    def _format(self, prompt: str, n_images: int) -> str:
+        """Wrap the rendered scaffold as one user turn in the model's chat template, then prefill the reply."""
+        prompt = IMAGE * max(n_images - prompt.count(IMAGE), 0) + prompt
+        content = []
+        for i, part in enumerate(prompt.split(IMAGE)):
+            if i:
+                content.append({"type": "image"})
+            if part.strip():
+                content.append({"type": "text", "text": part})
+        text = self.processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+        return f"{text} {self.cfg.response_prefix}" if self.cfg.response_prefix else text
+
+    def _inputs(self, prompt: str, images: list[np.ndarray], chat: bool = True) -> dict:
+        if chat:
+            text = self._format(prompt, len(images))
+        else:
+            text = IMAGE * max(len(images) - prompt.count(IMAGE), 0) + prompt
         pil = [Image.fromarray(im) for im in images]
         batch = self.processor(text=[text], images=[pil] if pil else None, return_tensors="pt")
         return {k: (v.to(self.device, self.model.dtype) if v.is_floating_point() else v.to(self.device))
@@ -72,6 +86,8 @@ class Policy:
         # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.
         lp = self.logprobs(prompt, images, ids).float()
         text = self.processor.tokenizer.decode(ids, skip_special_tokens=True)
+        if self.cfg.response_prefix:   # the prefilled tokens are prompt, not policy output, but parsing needs them
+            text = f"{self.cfg.response_prefix} {text.strip()}"
         return RolloutStep(text, ids, lp.cpu().numpy(), n_prompt)
 
     def logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int]) -> torch.Tensor:
@@ -87,7 +103,7 @@ class Policy:
     @torch.no_grad()
     def embed(self, text: str, images: list[np.ndarray]) -> np.ndarray:
         """Mean-pooled last hidden state, L2-normalized. The memory store's embedding: no second model needed."""
-        inputs = self._inputs(text, images)
+        inputs = self._inputs(text, images, chat=False)
         h = self.model(**inputs, output_hidden_states=True).hidden_states[-1][0].float()
         mask = inputs["attention_mask"][0, :, None].float()
         v = (h * mask).sum(0) / mask.sum()

@@ -45,3 +45,21 @@ def test_snapshot_restore_roundtrip(tiny):
     after = tiny.logprobs("hello", IMG, ids).detach()
     p.requires_grad_(False)
     torch.testing.assert_close(before, after)
+
+
+def test_prompt_is_wrapped_in_the_chat_template_with_response_prefix(tiny):
+    text = tiny._format("hello <image> there", n_images=1)
+    assert text.count("<image>") == 1
+    assert text.rstrip().endswith("Assistant: ACT:")
+
+
+def test_act_text_includes_the_prefix_so_parsing_sees_it(tiny):
+    assert tiny.act("hello", IMG).text.startswith("ACT:")
+
+
+def test_empty_prefix_restores_free_reasoning(tiny):
+    tiny.cfg.response_prefix = ""
+    try:
+        assert tiny._format("hello", n_images=1).rstrip().endswith("Assistant:")
+    finally:
+        tiny.cfg.response_prefix = "ACT:"

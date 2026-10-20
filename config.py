@@ -11,6 +11,8 @@ class PolicyConfig:
     dtype: str = "bfloat16"
     device: str = "auto"           # "auto" picks cuda when available
     scaffold_path: str = "scaffolds/v0.txt"
+    response_prefix: str = "ACT:"  # prefilled assistant turn: 39/40 parseable vs 4/40 without, for a 256M model.
+                                   # "" restores free reasoning before the ACT: line, for larger policies
 
 
 @dataclass
