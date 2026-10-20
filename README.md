@@ -1,106 +1,136 @@
 # nanoVLM-RSI
 
-The simplest harness for **multimodal recursive self-improvement** research, in plain PyTorch + numpy.
+The simplest repository for **multimodal recursive self-improvement** research, in plain PyTorch + numpy.
 
-nanoVLM showed that the essential parts of a VLM fit in a handful of readable files. nanoVLM-RSI does the
-same for the *loop*: a small VLM policy acts in a verifiable environment, a verifier scores what it did,
-an update rule turns that into a durable change, a gate decides whether the change is kept, and a trace
-records enough to attribute the result. Every RSI method here is written from scratch so you can read how
-it works. This is not a SOTA system. It's a playground where a loop closes on CPU in under a minute and a
-new experiment means one config line plus one file.
+nanoVLM showed that the essential parts of a vision-language model fit in a handful of readable
+files. nanoVLM-RSI does the same for the *self-improvement loop*. A small VLM acts in a verifiable
+environment. A verifier scores what it did. An update rule (GRPO on LoRA, or a skill library)
+turns that into a durable change. A gate keeps the change only if it helps on data the loop never
+trains on. A trace records enough to attribute the result.
+
+Every method is written from scratch, so you can read how it works: GRPO, LoRA, advantage
+estimation, the competence-frontier curriculum, the skill store, the gate. `transformers` loads
+weights and runs the forward pass, and nothing else. This is not a SOTA system. It's a playground
+where a loop closes on CPU in under a minute, and a new experiment is one config flag plus one file.
+
+## Result
+
+<!-- RESULTS -->
 
 ## The loop
 
 ```
-propose tasks -> roll out a group per task -> verify -> carrier proposes an update
-              -> gate commits or reverts it -> trace everything -> evaluate on held-out
+propose tasks ─► roll out a group per task ─► verify ─► carrier proposes an update
+              ─► gate commits or reverts it ─► trace everything ─► evaluate on held-out
 ```
 
-`rsi.py` *is* this loop, top to bottom. Read it first.
+`rsi.py` *is* this loop. `walkthrough.py` is the whole method in one file, in the order the loop
+runs, generated from the real source.
 
-## Files
+## What's in the box
 
 | File | Lines | What it is |
 |---|---:|---|
-| `rsi.py` | 107 | the loop and its CLI |
-| `rollout.py` | 48 | one episode: render scaffold, act, step, until done or out of budget |
-| `evaluate.py` | 96 | held-out eval with learning disabled; both held-out axes, against cost |
-| `config.py` | 43 | every knob, in two dataclasses |
-| `envs/base.py` | 55 | `Task`, `Obs`, the 4-method `Env`, process-stable train/gate/heldout split |
-| `envs/static.py` | 115 | from-scratch numpy env: `count_objects` (1 step), `gather_order` (multi-step) |
-| `policy/vlm.py` | 102 | HF VLM wrapper: `act()`, `logprobs()`, `embed()`, `snapshot()` |
-| `policy/prompt.py` | 41 | scaffold as data: slot contract, rendering, strict `ACT:` parsing |
-| `verify.py` | 66 | outcome verifier + reward-hacking flags |
-| `propose.py` | 32 | task proposer, structurally unable to emit gate/held-out seeds |
-| `update/base.py` | 35 | `Update` (carries its own taxonomy labels) and the `Updater` contract |
-| `update/memory.py` | 41 | memory carrier: successful trajectories become retrievable skills |
-| `infra/memory.py` | 128 | skill store: append-only event log with byte-exact revert |
-| `infra/gate.py` | 50 | the five-condition acceptance bar, as code |
-| `infra/trace.py` | 88 | append-only JSONL: run, rollout, update and eval records with cumulative cost |
-| `play.py` | 42 | watch a policy act, step by step |
+| `rsi.py` | 138 | the loop and its CLI: every config field is a flag |
+| `rollout.py` | 74 | one episode: render the prompt, act, step, until done or out of budget |
+| `policy/vlm.py` | 169 | any HF VLM behind `act()` / `logprobs()` / `embed()`; chat template, prefilled `ACT:` |
+| `policy/lora.py` | 53 | LoRA from scratch; switching adapters off recovers π_init exactly |
+| `update/weights.py` | 116 | GRPO from scratch: group advantages, clipped token-level loss, k3 KL |
+| `update/memory.py` | 45 | skill-library carrier: successful episodes become retrievable skills |
+| `infra/memory.py` | 134 | skill store: an append-only event log with byte-exact revert |
+| `infra/gate.py` | 50 | the acceptance bar: five conditions, gate split only |
+| `infra/trace.py` | 108 | JSONL trace: every rollout, update and eval, with cumulative cost |
+| `verify.py` | 134 | ground truth, VLM-as-judge, and routing with judge-vs-truth agreement logging |
+| `propose.py` | 64 | fixed sampling, or a curriculum at the competence frontier |
+| `envs/static.py` | 102 | from-scratch numpy env: count objects, gather in order. CPU, seconds |
+| `envs/craftax.py` | 73 | Craftax-Classic adapter, the only file that imports JAX (optional) |
+| `evaluate.py` | 103 | held-out eval with learning off: unseen-seed and unseen-goal axes, separately |
+| `evals/benchmarks.py` | 58 | MMStar (all 1,500) as a catastrophic-forgetting tripwire |
 
 ## Quickstart
 
 ```bash
+git clone https://github.com/OWNER/nanovlm-rsi && cd nanovlm-rsi
 uv venv --python 3.12 && source .venv/bin/activate
-uv pip install -e ".[dev]"            # or: pip install torch numpy transformers pillow safetensors pytest
+uv pip install -e ".[dev]"                  # or: pip install -e ".[dev]"
 
-pytest -q                              # full suite, CPU
-python rsi.py --tiny --iters 2         # close a loop on CPU with a tiny random policy (~30s)
-python rsi.py --iters 20               # real run: SmolVLM-256M policy, GPU if available
-python play.py --tiny                  # watch one episode
-python evaluate.py --tiny --n 50       # held-out eval only
+pytest -q                                   # full suite, CPU
+python rsi.py --tiny --iters 2              # close a loop on CPU with a tiny random policy (~30 s)
+python play.py --tiny                       # watch one episode, step by step
 ```
 
-Every `LoopConfig` field is also a CLI flag (`--update_rule`, `--group_size`, `--gate_enabled false`, ...).
+Or open `quickstart.ipynb` in Colab.
+
+**The real run** (SmolVLM-256M, one GPU):
+
+```bash
+python rsi.py --update_rule weights --proposer self --static_families count_objects \
+    --iters 100 --tasks_per_iter 8 --group_size 8 --eval_every 10 --gate_n 32 \
+    --bench true --run_dir runs/headline     # --bench needs: pip install -e ".[bench]"
+
+python tools/plot.py runs/headline --x gpu_seconds --out headline.png     # needs ".[plot]"
+python evaluate.py --split heldout          # held-out only, learning off
+python evaluate.py --benchmarks             # MMStar only
+```
+
+Open-world: `pip install -e ".[craftax]"`, then `--env craftax`.
 
 ## The knobs that define an experiment
 
-- `update_rule`: **the carrier**, exactly one per run. `memory` works now; `weights` (GRPO + LoRA) and
-  `scaffold` (prompt self-edit) raise `NotImplementedError` naming the slice they land in.
-- `proposer`: `fixed` now; `self` (competence-frontier curriculum) later. It's independent of the carrier.
-- `gate_enabled`: you can turn it off for ablations, and the trace records that you did, so an ungated
-  run can't be passed off as gated.
+| Flag | Values | What it changes |
+|---|---|---|
+| `--update_rule` | `weights` · `memory` | **the carrier**: exactly one per run. `weights` = GRPO on LoRA (`--grpo_mode full` for all LM weights), `memory` = skill library |
+| `--proposer` | `fixed` · `self` | uniform sampling, or the competence-frontier curriculum |
+| `--verifier` | `outcome` · `judge` · `composite` | ground truth, a separate frozen VLM judge, or ground truth shadowed by the judge (agreement logging) |
+| `--env` | `static` · `craftax` | procedural verifiable tasks, or open-world Craftax |
+| `--gate_enabled` | `true` · `false` | turn the gate off for ablations; the trace records that you did |
 
-## What makes a result trustworthy here
+Carrier × proposer × verifier is a clean grid: each axis changes one component.
 
-- **Three-way split by `crc32(seed)`.** `train` 70%, `gate` 10%, `heldout` 20%. Accept/reject decisions
-  only ever see `gate`, and `heldout` is only used for reporting. Builtin `hash()` isn't used because
-  it's salted per process.
-- **Frozen held-out.** 200 tasks drawn once per `env_seed`, so runs are comparable.
-- **Two held-out axes reported separately.** *Unseen seed* (new world, known goal) and *unseen goal*
-  (compositional generalization).
-- **Matched cost.** Every rollout counts, including gate and eval rollouts. Plot success against cost,
-  not against iteration.
-- **Parse failures are first-class.** If a run "improves" only by learning to emit `ACT:` lines, that
-  shows up as `parse_fail_rate`.
+## What makes a result here trustworthy
+
+- **Three splits by seed hash**: train 70%, gate 10%, held-out 20%. Proposers only ever see train,
+  and this is enforced in code. Accept/reject decisions see only gate. Held-out is only used for
+  reporting, and it's frozen per `env_seed`.
+- **The gate** keeps an update only if it is on disk, actually changed something, didn't hurt the
+  gate split, came from a signal that would exist at deployment, and didn't raise the parse-failure
+  rate.
+- **Matched cost**: every rollout counts, including gate and eval ones. Plot success against
+  cost, never against iteration.
+- **Two held-out axes** reported separately: unseen seed (new image, known goal) and unseen goal.
+- **A forgetting tripwire**: full MMStar before and after, policy only.
+
+See [`docs/architecture.md`](docs/architecture.md) for every interface and for how to add your own
+environment or carrier.
+
+## Hardware
+
+The default policy is `HuggingFaceTB/SmolVLM-256M-Instruct` in bf16 with LoRA r=8 on the language
+model's q/v projections. The vision tower is frozen. The adapters train in fp32. One action takes
+about 0.16 s on an A40. Any HF image-text-to-text model works via `PolicyConfig.model_id`.
 
 ## Status
 
-| Slice | | |
-|---|---|---|
-| 1 | spine + static env + memory carrier, CPU end-to-end | done |
-| 2 | weights carrier: GRPO + LoRA from scratch | next |
-| 3 | Craftax adapter (JAX quarantined to `envs/craftax.py`) | |
-| 4 | judge verifier (separate small VLM) + judge/truth agreement logging | |
-| 5 | self-curriculum proposer | |
-| 6 | scaffold carrier | |
-| 7 | MMStar (full 1,500) forgetting tripwire + `walkthrough.py` | |
+| | |
+|---|---|
+| GRPO + LoRA carrier, skill-library carrier | ✅ |
+| static env, Craftax adapter | ✅ |
+| outcome / judge / composite verifiers, agreement logging | ✅ |
+| fixed and self-curriculum proposers | ✅ |
+| gate, trace, held-out eval, MMStar tripwire | ✅ |
+| scaffold self-edit carrier (`update/scaffold.py`) | stub, design in its docstring |
+| verifier self-improvement (`update/verifier.py`) | stub; its training data is already logged |
 
-## Dependencies
+Known limitations: rollouts in a GRPO group are generated one at a time (batching would be a
+large speedup), and memory retrieval is keyed on text only, so it can't tell apart tasks that
+share a prompt.
 
-`torch`, `numpy`, `transformers`, `pillow`, `safetensors`. Optional extras: `[craftax]`, `[bench]`, `[wandb]`.
+## Contributing
 
-**No framework may own the control flow.** No `trl`, `peft`, `accelerate`, or RL library. `transformers`
-loads weights and runs the forward pass, and that's all it does. GRPO, LoRA, advantage estimation, memory
-operations, the proposer and the gate are all written here.
+Same rule as nanoVLM: **no framework may own the control flow**. No `trl`, `peft`, `accelerate`
+or RL libraries. New carriers, environments and verifiers are very welcome. Each one should be one
+file behind the existing interface, with tests.
 
-## Provenance
+## License
 
-- Environment contract follows the reset/step interface of Gym, reduced to four methods.
-- Skill memory follows the skill-library idea from Voyager (Wang et al., 2023), reduced to retrieval
-  over the policy's own embeddings.
-- The gate turns a five-condition operational bar for durable self-improvement into code: the system
-  proposed the update, it survives a reset, it gains on held-out data at matched cost, its feedback would
-  exist at deployment, and it doesn't regress.
-- Design and rationale: `docs/design/spec.md`.
+Apache-2.0.

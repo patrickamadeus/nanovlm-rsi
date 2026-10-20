@@ -459,3 +459,20 @@ Each slice ends with the loop still runnable and its tests passing.
    reported against cost, with both held-out axes separated.
 6. A researcher can clone, install, and close a loop on CPU in under ten
    minutes.
+
+## 16. Implementation notes (v0.1)
+
+Where the shipped code departs from this spec, and why. Each was found while building or in review.
+
+| Spec said | v0.1 does | Why |
+|---|---|---|
+| §4 loop: `gate()` then `commit()` | the gate owns the sequence: eval before → commit → reload probe → eval after → revert on failure | a gain can't be measured, nor persistence probed, before the update is applied |
+| §6 free reasoning, then an `ACT:` line | the assistant turn is prefilled with `ACT:` (`response_prefix`; `""` restores reasoning) | untrained SmolVLM-256M produced a parseable action 4/40 times; prefilled, 39/40 |
+| §5 static env actions | count answers are bare digits | SmolVLM answers "3", not "say_3"; the old action set rejected correct answers |
+| §6 one image | env frames are one 512px tile (`image_side`) | the processor default upscaled 64px frames to 17 tiles (1,233 tokens); 6× faster |
+| §6 per-token logprobs from generation | logprobs come from a full-forward re-score | bf16 KV-cache decode drifted up to 0.27 nats from a full pass, enough to break GRPO ratios |
+| §8 memory dedupe by similarity | a duplicate must also replay the same actions; skill ids are uuids; the store is an add/use/drop event log | similarity-only dedupe with binary rewards collapsed the store to ~1 skill per family; the event log makes byte-offset revert exact |
+| §9 reload probe | `persisted()` also requires the update to have changed something | otherwise a commit that deduplicated to nothing was recorded as committed |
+| §8 LoRA | adapters stay fp32 on a bf16 base | bf16 rounds most AdamW steps at lr 1e-4 to nothing |
+| §14 slice 6 (scaffold carrier) | deferred; `update/scaffold.py` is a stub with this design | descoped for v0.1 |
+| §10 policy-generated goal specs | not implemented; the curriculum selects among env goals | marked optional in §10 |
