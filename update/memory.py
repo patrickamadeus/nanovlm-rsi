@@ -34,3 +34,8 @@ class MemoryUpdater(Updater):
 
     def revert(self, update: Update) -> None:
         self.store.truncate(update.payload["revert_offset"])
+
+    def persisted(self, update: Update) -> bool:
+        fresh = SkillStore(self.store.path, self.store.embed_fn, self.store.max_size, self.store.dedupe_sim)
+        stored = {s.situation for s in fresh.skills()}
+        return all(s["situation"] in stored for s in update.payload["skills"])

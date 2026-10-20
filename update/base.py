@@ -29,3 +29,7 @@ class Updater(ABC):
     @abstractmethod
     def revert(self, update: Update) -> None:
         """Undo a committed update exactly; the gate depends on this being honest."""
+
+    @abstractmethod
+    def persisted(self, update: Update) -> bool:
+        """Reload probe: rebuild this organ from disk and report whether the update is there."""

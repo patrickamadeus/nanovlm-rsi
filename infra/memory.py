@@ -74,6 +74,9 @@ class SkillStore:
     def __len__(self) -> int:
         return len(self._skills)
 
+    def skills(self) -> list[Skill]:
+        return list(self._skills.values())
+
     def _similar(self, emb: np.ndarray) -> tuple[Skill | None, float]:
         best, best_sim = None, -1.0
         for s in self._skills.values():
