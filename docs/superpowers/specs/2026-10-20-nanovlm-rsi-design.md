@@ -64,6 +64,7 @@ them is the standard way agentic RSI results get oversold:
 | Judge | Separate small frozen VLM, not the policy's own weights |
 | Held-out set | Frozen: 200 tasks drawn once per `env_seed`, reused across runs |
 | Splits | Three-way: `train` / `gate` / `heldout` |
+| Benchmark tripwire | MMStar, full 1,500, multiple-choice exact-match |
 | Architecture | Flat organs, explicit loop, dataclass config |
 
 ### Rationale for the load-bearing ones
@@ -392,8 +393,20 @@ GRPO costs a great deal, so iteration-indexed curves would make memory look slow
 and weights look efficient purely as an artifact of the x-axis.
 
 `evaluate.py` runs a split with learning disabled and prints the table.
-`--benchmarks` runs `evals/benchmarks.py`, a small exact-match multimodal subset
-that is explicitly a regression tripwire, not a headline claim.
+`--benchmarks` runs `evals/benchmarks.py` on **MMStar, all 1,500 samples**,
+multiple-choice exact-match. It is a **catastrophic-forgetting tripwire**, not a
+headline claim: LoRA updates on synthetic env tasks can quietly erode general
+visual competence, and this is what catches it. MMStar is chosen because it is
+broad and vision-indispensable rather than domain-matched — a benchmark resembling
+the env would improve alongside it and detect nothing.
+
+The full set is mandatory for any reported number: published MMStar results are
+on all 1,500, and at ~35% accuracy a 500-sample subset's 95% interval (about
+±4 points) is wider than typical forgetting drops (2–4 points), versus about
+±2.4 at n=1,500. It runs at the pre-RSI baseline and at the end of the run,
+optionally every k evals. `--bench_n` exists for debugging only; subset runs are
+labeled `bench_subset: true` in the trace so they cannot pass as reported
+results. The dataset is cached as a frozen local snapshot on first use.
 
 ## 12. Tests
 
@@ -410,7 +423,7 @@ that is explicitly a regression tripwire, not a headline claim.
 ## 13. Dependencies
 
 Floor: `torch`, `numpy`, `transformers`, `pillow`, `safetensors`.
-Extras: `[craftax]` -> `jax`, `craftax`; `[wandb]`.
+Extras: `[craftax]` -> `jax`, `craftax`; `[bench]` -> `datasets`; `[wandb]`.
 
 **Enforced socially, as nanoVLM does:** no framework may own the control flow.
 No `trl`, no `peft`, no `accelerate`, no RL library. GRPO, LoRA, advantage
@@ -430,7 +443,7 @@ interfaces.
 4. **Judge verifier** + agreement logging.
 5. **Self-curriculum proposer.**
 6. **Scaffold carrier.**
-7. **Benchmark regression** + `walkthrough.py` teaching artifact.
+7. **MMStar benchmark regression** + `walkthrough.py` teaching artifact.
 
 Each slice ends with the loop still runnable and its tests passing.
 

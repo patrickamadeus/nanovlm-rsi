@@ -68,7 +68,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'config'`
 
 - [ ] **Step 3: Write `pyproject.toml`**
 
-Package name `nanovlm-rsi`, `requires-python = ">=3.12"`, the dependency floor from Global Constraints, optional extras `craftax` and `wandb` declared but empty-bodied for now, and `[tool.pytest.ini_options] testpaths = ["tests"]`.
+Package name `nanovlm-rsi`, `requires-python = ">=3.12"`, the dependency floor from Global Constraints, optional extras `craftax`, `bench` and `wandb` declared but empty-bodied for now, and `[tool.pytest.ini_options] testpaths = ["tests"]`.
 
 - [ ] **Step 4: Implement `PolicyConfig` and `LoopConfig` in `config.py`**
 
@@ -862,7 +862,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'evaluate'`
 
 - [ ] **Step 3: Implement `evaluate.py`**
 
-Run `rollout` over each task with memory retrieval allowed but all writes suppressed — pass the store for `retrieve` only, never call `append`. A task counts toward `unseen_goal_rate` when its `goal` was never seen in any training rollout in the trace, and toward `unseen_seed_rate` otherwise; compute the two rates over their own denominators and guard division by zero. Log one `eval` record with cumulative cost. `main()` prints a plain table; `--benchmarks` raises `NotImplementedError("benchmark regression lands in Slice 7")`.
+Run `rollout` over each task with memory retrieval allowed but all writes suppressed — pass the store for `retrieve` only, never call `append`. A task counts toward `unseen_goal_rate` when its `goal` was never seen in any training rollout in the trace, and toward `unseen_seed_rate` otherwise; compute the two rates over their own denominators and guard division by zero. Log one `eval` record with cumulative cost. `main()` prints a plain table; `--benchmarks` raises `NotImplementedError("MMStar benchmark regression lands in Slice 7")`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
