@@ -12,7 +12,7 @@ class ScriptedPolicy:
         self._gen = iter(generations)
         self.prompts: list[str] = []
 
-    def act(self, prompt, images):
+    def act(self, prompt, images, **kw):
         self.prompts.append(prompt)
         text = next(self._gen, "")
         n = max(len(text.split()), 1)

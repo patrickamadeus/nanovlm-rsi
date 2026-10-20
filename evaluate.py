@@ -80,10 +80,17 @@ def main():
     ap.add_argument("--tiny", action="store_true", help="randomly-initialized tiny policy (CPU smoke)")
     ap.add_argument("--benchmarks", action="store_true", help="MMStar regression tripwire")
     args = ap.parse_args()
-    if args.benchmarks:
-        raise NotImplementedError("MMStar benchmark regression lands in Slice 7")
     cfg = LoopConfig(run_dir=args.run_dir)
     cfg.policy.tiny = args.tiny
+    if args.benchmarks:
+        from evals.benchmarks import load_mmstar, log_bench, run_mmstar
+        from policy.vlm import Policy as _Policy
+        r = run_mmstar(_Policy(cfg.policy), load_mmstar(args.n if args.n != 200 else None))
+        log_bench(Trace(cfg.run_dir), r, when="standalone")
+        print(f"MMStar n={r.n} accuracy={r.accuracy:.3f}{'  (SUBSET: debug only)' if r.subset else ''}")
+        for c, a in r.per_category.items():
+            print(f"  {c:<28}{a:.3f}")
+        return
     env = make_env(cfg)
     r = evaluate(Policy(cfg.policy), env, env.tasks(args.split, args.n, np.random.default_rng(cfg.seed)),
                  Trace(cfg.run_dir), cfg, final=True)

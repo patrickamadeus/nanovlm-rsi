@@ -77,7 +77,7 @@ class Policy:
         finally:
             self.model = model
 
-    def _format(self, prompt: str, n_images: int) -> str:
+    def _format(self, prompt: str, n_images: int, prefix: str | None = None) -> str:
         """Wrap the rendered scaffold as one user turn in the model's chat template, then prefill the reply."""
         prompt = IMAGE * max(n_images - prompt.count(IMAGE), 0) + prompt
         content = []
@@ -87,11 +87,12 @@ class Policy:
             if part.strip():
                 content.append({"type": "text", "text": part})
         text = self.processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
-        return f"{text} {self.cfg.response_prefix}" if self.cfg.response_prefix else text
+        prefix = self.cfg.response_prefix if prefix is None else prefix
+        return f"{text} {prefix}" if prefix else text
 
-    def _inputs(self, prompt: str, images: list[np.ndarray], chat: bool = True) -> dict:
+    def _inputs(self, prompt: str, images: list[np.ndarray], chat: bool = True, prefix: str | None = None) -> dict:
         if chat:
-            text = self._format(prompt, len(images))
+            text = self._format(prompt, len(images), prefix)
         else:
             text = IMAGE * max(len(images) - prompt.count(IMAGE), 0) + prompt
         pil = [Image.fromarray(im) for im in images]
@@ -100,26 +101,32 @@ class Policy:
                 for k, v in batch.items()}
 
     @torch.no_grad()
-    def act(self, prompt: str, images: list[np.ndarray]) -> RolloutStep:
-        inputs = self._inputs(prompt, images)
+    def act(self, prompt: str, images: list[np.ndarray], *, prefix: str | None = None,
+            greedy: bool = False) -> RolloutStep:
+        """Sample a completion. `prefix` overrides cfg.response_prefix for this call; `greedy` is for
+        benchmarks, where we measure the policy rather than draw from it (logprobs are then not pi_old)."""
+        inputs = self._inputs(prompt, images, prefix=prefix)
         n_prompt = inputs["input_ids"].shape[1]
-        # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T), which logprobs() reproduces
-        out = self.model.generate(**inputs, do_sample=True, temperature=self.cfg.temperature, top_k=0, top_p=1.0,
-                                  max_new_tokens=self.cfg.max_new_tokens, return_dict_in_generate=True,
-                                  pad_token_id=self.processor.tokenizer.pad_token_id)
+        sampling = (dict(do_sample=False) if greedy else
+                    # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T)
+                    dict(do_sample=True, temperature=self.cfg.temperature, top_k=0, top_p=1.0))
+        out = self.model.generate(**inputs, **sampling, max_new_tokens=self.cfg.max_new_tokens,
+                                  return_dict_in_generate=True, pad_token_id=self.processor.tokenizer.pad_token_id)
         ids = out.sequences[0, n_prompt:].tolist()
         # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the
         # KV-cache decode drifts from a full pass by up to ~0.27 nats, which would put GRPO ratios
         # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.
-        lp = self.logprobs(prompt, images, ids).float()
+        lp = self.logprobs(prompt, images, ids, prefix=prefix).float()
         text = self.processor.tokenizer.decode(ids, skip_special_tokens=True)
-        if self.cfg.response_prefix:   # the prefilled tokens are prompt, not policy output, but parsing needs them
-            text = f"{self.cfg.response_prefix} {text.strip()}"
+        prefix = self.cfg.response_prefix if prefix is None else prefix
+        if prefix:                     # the prefilled tokens are prompt, not policy output, but parsing needs them
+            text = f"{prefix} {text.strip()}"
         return RolloutStep(text, ids, lp.cpu().numpy(), n_prompt)
 
-    def logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int]) -> torch.Tensor:
+    def logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int],
+                 prefix: str | None = None) -> torch.Tensor:
         """Re-score an existing completion under current params; differentiable when params require grad."""
-        inputs = self._inputs(prompt, images)
+        inputs = self._inputs(prompt, images, prefix=prefix)
         n_prompt = inputs["input_ids"].shape[1]
         completion = torch.tensor([token_ids], device=self.device)
         inputs["input_ids"] = torch.cat([inputs["input_ids"], completion], dim=1)

@@ -69,6 +69,11 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
     heldout  = env.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed))   # frozen per env_seed
     trace.log_run(cfg_hash=cfg.hash(), git_sha=git_sha(), seeds={"seed": cfg.seed, "env_seed": cfg.env_seed},
                   carrier=cfg.update_rule, proposer=cfg.proposer, gate_enabled=cfg.gate_enabled)
+    bench_rows = None
+    if cfg.bench:                                             # forgetting tripwire: policy alone, no memory
+        from evals.benchmarks import load_mmstar, log_bench, run_mmstar
+        bench_rows = load_mmstar(cfg.bench_n or None)
+        log_bench(trace, run_mmstar(policy, bench_rows), when="baseline")
 
     for it in range(cfg.iters):
         if it % cfg.eval_every == 0:                          # it == 0 is the pre-RSI baseline
@@ -102,7 +107,10 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
                          reason=result.reason, gate_before=result.before, gate_after=result.after,
                          proposer_stats=getattr(propose, "last_stats", None), **update_stats(update))
 
-    return evaluate(policy, env, heldout, trace, cfg, store=store, final=True)
+    final = evaluate(policy, env, heldout, trace, cfg, store=store, final=True)
+    if bench_rows is not None:
+        log_bench(trace, run_mmstar(policy, bench_rows), when="final")
+    return final
 
 
 def main():

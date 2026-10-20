@@ -6,9 +6,9 @@ requires-python = ">=3.12"
 dependencies = ["torch", "numpy", "transformers", "pillow", "safetensors"]
 
 [project.optional-dependencies]
-craftax = []
-bench = []
-wandb = []
+craftax = ["jax", "craftax"]
+bench = ["datasets"]
+wandb = ["wandb"]
 dev = ["pytest"]
 
 [tool.pytest.ini_options]
