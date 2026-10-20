@@ -28,7 +28,8 @@ def make_env(cfg: LoopConfig) -> Env:
     if cfg.env == "static":
         return StaticEnv(env_seed=cfg.env_seed, heldout_n=cfg.heldout_n)
     if cfg.env == "craftax":
-        raise NotImplementedError("craftax env lands in Slice 3")
+        from envs.craftax import CraftaxEnv          # imported lazily: JAX loads only when Craftax is used
+        return CraftaxEnv(env_seed=cfg.env_seed, heldout_n=cfg.heldout_n, budget=cfg.craftax_budget)
     raise ValueError(f"unknown env {cfg.env!r}")
 
 

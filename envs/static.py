@@ -7,7 +7,7 @@ Every task is a pure function of its seed, so a Task fully reproduces its world.
 """
 import numpy as np
 
-from envs.base import Env, Obs, Task, split_for_seed
+from envs.base import Env, Obs, SeededTasks, Task, split_for_seed
 
 GRID, CELL = 8, 8                      # 8x8 cells of 8px -> 64x64 image
 COLORS = {"red": (220, 40, 40), "green": (40, 200, 60), "blue": (50, 90, 230),
@@ -38,11 +38,13 @@ def render(cells: dict[tuple[int, int], tuple[int, int, int]], agent: tuple[int,
     return img
 
 
-class StaticEnv(Env):
+class StaticEnv(SeededTasks, Env):
     def __init__(self, env_seed: int = 0, heldout_n: int = 200):
         self.env_seed, self.heldout_n = env_seed, heldout_n
-        self._heldout: list[Task] | None = None
         self._task: Task | None = None
+
+    def make_task(self, seed: int) -> Task:
+        return make_task(seed)
 
     @property
     def actions(self) -> list[str]:
@@ -94,22 +96,3 @@ class StaticEnv(Env):
         text = (f"You are the white frame. Pick up objects in this order: {', '.join(task.goal)}. "
                 f"Collected so far: {got}.")
         return Obs(render(cells, self._agent), text)
-
-    def tasks(self, split: str, n: int, rng: np.random.Generator) -> list[Task]:
-        if split == "heldout":
-            if self._heldout is None:          # frozen: drawn once per env_seed, ignores the caller's rng
-                self._heldout = self._draw("heldout", self.heldout_n, np.random.default_rng(self.env_seed))
-            if n > len(self._heldout):
-                raise ValueError(f"asked for {n} held-out tasks, only {len(self._heldout)} are frozen")
-            return self._heldout[:n]
-        return self._draw(split, n, rng)
-
-    def _draw(self, split: str, n: int, rng: np.random.Generator) -> list[Task]:
-        out = []
-        for _ in range(n * 100):
-            seed = int(rng.integers(0, 2**31 - 1))
-            if split_for_seed(seed) == split:
-                out.append(make_task(seed))
-                if len(out) == n:
-                    return out
-        raise RuntimeError(f"could not draw {n} {split!r} tasks; split buckets may be misconfigured")

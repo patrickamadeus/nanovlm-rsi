@@ -25,6 +25,7 @@ class LoopConfig:
     env: str = "static"            # "static" | "craftax"
     verifier: str = "outcome"      # "outcome" | "judge" | "composite"
     env_seed: int = 0              # fixes the frozen held-out set
+    craftax_budget: int = 64       # env steps per Craftax episode
     heldout_n: int = 200
     gate_n: int = 32               # tasks drawn from the gate split per accept/reject decision
     eval_every: int = 5

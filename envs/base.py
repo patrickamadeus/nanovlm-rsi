@@ -36,6 +36,38 @@ def stamp_split(task: Task) -> Task:
     return replace(task, split=split_for_seed(task.seed))
 
 
+def draw_tasks(make_task, split: str, n: int, rng: np.random.Generator) -> list[Task]:
+    """Sample n tasks of `split` by rejection on the seed hash, so the split is a property of the seed."""
+    out = []
+    for _ in range(n * 100):
+        seed = int(rng.integers(0, 2**31 - 1))
+        if split_for_seed(seed) == split:
+            out.append(make_task(seed))
+            if len(out) == n:
+                return out
+    raise RuntimeError(f"could not draw {n} {split!r} tasks; split buckets may be misconfigured")
+
+
+class SeededTasks:
+    """Mixin for envs whose tasks are a pure function of a seed: train/gate drawn from rng, held-out frozen."""
+    env_seed: int
+    heldout_n: int
+    _heldout: list[Task] | None = None
+
+    def make_task(self, seed: int) -> Task:
+        raise NotImplementedError
+
+    def tasks(self, split: str, n: int, rng: np.random.Generator) -> list[Task]:
+        if split == "heldout":
+            if self._heldout is None:      # frozen: drawn once per env_seed, ignores the caller's rng
+                self._heldout = draw_tasks(self.make_task, "heldout", self.heldout_n,
+                                           np.random.default_rng(self.env_seed))
+            if n > len(self._heldout):
+                raise ValueError(f"asked for {n} held-out tasks, only {len(self._heldout)} are frozen")
+            return self._heldout[:n]
+        return draw_tasks(self.make_task, split, n, rng)
+
+
 class Env(ABC):
     @abstractmethod
     def reset(self, task: Task) -> Obs:
