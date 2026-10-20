@@ -58,3 +58,20 @@ def test_composite_verifier_logs_judge_agreement_in_the_loop(tmp_path):
     train = [r for r in Trace(str(tmp_path)).records("rollout") if r.get("iter") is not None]
     assert train and all(r["verdict_source"] == "outcome" and r["judge_verdict"] in (0.0, 1.0) for r in train)
     assert Trace(str(tmp_path)).cumulative_cost.judge_tokens > 0
+
+
+def test_self_proposer_runs_in_the_loop_and_logs_its_stats(tmp_path):
+    rsi(small(tmp_path, proposer="self", gate_enabled=False, tasks_per_iter=4),
+        policy=ScriptedPolicy(cycle(["ACT: say_3"])))
+    committed = [u for u in Trace(str(tmp_path)).records("update") if u.get("carrier")]
+    assert committed and all("frontier_frac" in u["proposer_stats"] for u in committed)
+
+
+def test_weights_carrier_closes_the_loop_with_the_real_tiny_policy(tmp_path):
+    cfg = small(tmp_path, iters=2, tasks_per_iter=2, group_size=4, update_rule="weights", gate_enabled=False,
+                policy=PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=4,
+                                    response_prefix="ACT: say_"))
+    assert isinstance(rsi(cfg), EvalResult)
+    updates = Trace(str(tmp_path)).records("update")
+    assert any(u.get("carrier") == "A5" and "loss" in u for u in updates) or \
+        all(u["reason"] == "no usable signal" for u in updates)

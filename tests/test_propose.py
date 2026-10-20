@@ -28,6 +28,6 @@ def test_successive_calls_draw_fresh_tasks():
     assert [t.seed for t in prop(None, None)] != [t.seed for t in prop(None, None)]
 
 
-def test_self_proposer_not_yet_available():
-    with pytest.raises(NotImplementedError, match="Slice 5"):
-        make_proposer("self", StaticEnv(), LoopConfig())
+def test_unknown_proposer_is_rejected():
+    with pytest.raises(ValueError):
+        make_proposer("oracle", StaticEnv(), LoopConfig())

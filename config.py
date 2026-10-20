@@ -22,6 +22,11 @@ class LoopConfig:
     tasks_per_iter: int = 4
     update_rule: str = "memory"    # the carrier: "weights" | "memory" | "scaffold" — exactly one per run
     proposer: str = "fixed"        # "fixed" | "self"
+    proposer_pool: int = 8         # self proposer: candidates drawn per task it returns
+    proposer_band: tuple[float, float] = (0.2, 0.8)   # the competence frontier: where GRPO groups carry signal
+    proposer_epsilon: float = 0.1  # uniform mixing, so nothing is ever starved
+    proposer_unseen_weight: float = 1.0
+    proposer_off_band_weight: float = 0.05
     env: str = "static"            # "static" | "craftax"
     verifier: str = "outcome"      # "outcome" | "judge" | "composite"
     env_seed: int = 0              # fixes the frozen held-out set

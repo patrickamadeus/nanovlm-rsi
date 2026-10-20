@@ -50,6 +50,11 @@ def check_run_dir(cfg: LoopConfig) -> None:
         raise FileExistsError(f"{cfg.run_dir} already holds {used}; pick a new --run_dir or pass --resume true")
 
 
+def update_stats(update) -> dict:
+    """Scalar diagnostics a carrier put in its payload (loss, grad norm, discarded groups) — never tensors."""
+    return {k: v for k, v in update.payload.items() if isinstance(v, (int, float))}
+
+
 def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
     check_run_dir(cfg)
     if policy is None:
@@ -93,7 +98,8 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
                          clock=update.clock, signal=update.signal, cost=update.cost,
                          provenance=list(update.provenance), committed=result.passed,
                          gate_enabled=result.gate_enabled, conditions=result.conditions,
-                         reason=result.reason, gate_before=result.before, gate_after=result.after)
+                         reason=result.reason, gate_before=result.before, gate_after=result.after,
+                         proposer_stats=getattr(propose, "last_stats", None), **update_stats(update))
 
     return evaluate(policy, env, heldout, trace, cfg, store=store, final=True)
 

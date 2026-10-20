@@ -82,11 +82,20 @@ class Trace:
                     out.append(rec)
         return out
 
+    def success_table(self) -> dict[tuple, tuple[int, int]]:
+        """(family, goal) -> (wins, attempts) over train rollouts, in one pass over the trace."""
+        table: dict[tuple, list[int]] = {}
+        for r in self.records("rollout"):
+            if r.get("split") == "train" and "family" in r:
+                cell = table.setdefault((r["family"], tuple(r.get("goal", ()))), [0, 0])
+                cell[0] += int(r.get("reward", 0) >= 1.0)
+                cell[1] += 1
+        return {k: (w, n) for k, (w, n) in table.items()}
+
     def success_rate(self, family: str, goal: tuple) -> float | None:
         """None means never attempted — distinct from always failed, which the proposer needs to tell apart."""
-        rewards = [r["reward"] for r in self.records("rollout")
-                   if r.get("split") == "train" and r.get("family") == family and tuple(r.get("goal", ())) == tuple(goal)]
-        return sum(1.0 for x in rewards if x >= 1.0) / len(rewards) if rewards else None
+        wins, n = self.success_table().get((family, tuple(goal)), (0, 0))
+        return wins / n if n else None
 
 
 def _jsonable(x):
