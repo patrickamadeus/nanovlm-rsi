@@ -6,6 +6,7 @@
 One carrier per run (update_rule), one proposer (proposer). Swapping either is one config line.
 """
 import argparse
+import os
 import subprocess
 from dataclasses import fields
 
@@ -39,7 +40,17 @@ def git_sha() -> str:
         return "unknown"
 
 
+def check_run_dir(cfg: LoopConfig) -> None:
+    """A second run in the same directory would inherit memory, cost and trained goals, so the
+    'pre-RSI baseline' would not be one. Refuse unless the caller is resuming on purpose."""
+    used = [f for f in ("trace.jsonl", "skills.jsonl")
+            if os.path.exists(os.path.join(cfg.run_dir, f)) and os.path.getsize(os.path.join(cfg.run_dir, f))]
+    if used and not cfg.resume:
+        raise FileExistsError(f"{cfg.run_dir} already holds {used}; pick a new --run_dir or pass --resume true")
+
+
 def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
+    check_run_dir(cfg)
     if policy is None:
         from policy.vlm import Policy
         policy = Policy(cfg.policy)
@@ -60,11 +71,12 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
         tasks = propose(policy, trace)                        # train split only
         batch = []
         for task in tasks:
-            for _ in range(cfg.group_size):                   # GRPO needs a group; memory just gets more tries
-                memory_text, skill_ids = recall(store, env, task, cfg.mem_top_k)
+            memory_text, skill_ids, recall_s = recall(store, env, task, cfg.mem_top_k)   # once per task
+            for g in range(cfg.group_size):                   # GRPO needs a group; memory just gets more tries
                 traj = rollout(policy, env, task, cfg, memory_text=memory_text)
                 scored = verifier.score(traj)
-                trace.log_rollout(**rollout_record(traj, skill_ids, scored.verdict_source),
+                trace.log_rollout(**rollout_record(traj, skill_ids, scored.verdict_source,
+                                                   extra_seconds=recall_s if g == 0 else 0.0),
                                   flags=scored.flags, iter=it)
                 if store is not None:                         # use-attribution: was the skill there when it worked?
                     store.note_use(skill_ids, succeeded=scored.reward >= 1.0)

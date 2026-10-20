@@ -6,6 +6,7 @@ cumulative cost are all here, so reading results never requires reading code.
 import json
 import os
 import time
+import uuid
 from dataclasses import asdict, dataclass
 
 
@@ -22,21 +23,31 @@ class Cost:
 
 
 def _rollout_cost(rec: dict) -> Cost:
-    return Cost(rec.get("env_steps", 0), rec.get("tokens_out", 0),
+    return Cost(rec.get("env_steps", 0), rec.get("tokens_in", 0) + rec.get("tokens_out", 0),
                 rec.get("judge_tokens", 0), rec.get("gpu_seconds", 0.0))
 
 
+def heal_tail(path: str) -> None:
+    """Drop a partial last line left by a killed run, so the next append starts on a clean line."""
+    with open(path, "rb+") as f:
+        data = f.read()
+        if data and not data.endswith(b"\n"):
+            f.truncate(data.rfind(b"\n") + 1)
+
+
 class Trace:
-    def __init__(self, run_dir: str):
+    def __init__(self, run_dir: str, run_id: str | None = None):
         os.makedirs(run_dir, exist_ok=True)
         self.path = os.path.join(run_dir, "trace.jsonl")
+        self.run_id = run_id or uuid.uuid4().hex[:8]   # every record says which run wrote it
         open(self.path, "a").close()
+        heal_tail(self.path)
         self._cost = Cost()
         for rec in self.records("rollout"):
             self._cost += _rollout_cost(rec)
 
     def _write(self, kind: str, fields: dict) -> None:
-        rec = {"kind": kind, "iso_ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **fields}
+        rec = {"kind": kind, "run_id": self.run_id, "iso_ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **fields}
         with open(self.path, "a") as f:
             f.write(json.dumps(rec, default=_jsonable) + "\n")
 

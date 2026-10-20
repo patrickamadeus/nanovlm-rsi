@@ -6,10 +6,13 @@ counts and expirations alike — which is what makes the gate's revert exact.
 """
 import json
 import os
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 import numpy as np
+
+from infra.trace import heal_tail
 
 
 @dataclass(frozen=True)
@@ -30,11 +33,11 @@ class SkillStore:
         self.path, self.embed_fn, self.max_size, self.dedupe_sim = path, embed_fn, max_size, dedupe_sim
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         open(path, "a").close()
+        heal_tail(path)
         self._load()
 
     def _load(self) -> None:
         self._skills: dict[str, Skill] = {}
-        self._added = 0
         with open(self.path) as f:
             for line in f:
                 try:
@@ -48,7 +51,6 @@ class SkillStore:
             s = ev["skill"]
             self._skills[s["id"]] = Skill(s["id"], s["family"], s["situation"], tuple(s["actions"]),
                                           s["reward"], np.asarray(s["embedding"], np.float32))
-            self._added += 1
         elif ev["op"] == "use":
             for sid in ev["ids"]:
                 if sid in self._skills:
@@ -77,23 +79,27 @@ class SkillStore:
     def skills(self) -> list[Skill]:
         return list(self._skills.values())
 
-    def _similar(self, emb: np.ndarray) -> tuple[Skill | None, float]:
+    def _twin(self, skill: Skill, emb: np.ndarray) -> tuple[Skill | None, float]:
+        """Nearest stored skill that would replay the same actions — only that counts as a duplicate."""
         best, best_sim = None, -1.0
         for s in self._skills.values():
+            if s.family != skill.family or s.actions != tuple(skill.actions):
+                continue
             sim = float(np.dot(s.embedding, emb))
             if sim > best_sim:
                 best, best_sim = s, sim
         return best, best_sim
 
     def append(self, skill: Skill) -> str | None:
-        """Add a skill; a near-duplicate is kept only if it beats the incumbent's reward. Returns the id or None."""
+        """Add a skill. A duplicate — same family, same actions, near-identical situation — is kept only if it
+        beats the incumbent's reward. Same situation with *different* actions is a different skill. Returns id or None."""
         emb = np.asarray(skill.embedding, np.float32)
-        twin, sim = self._similar(emb)
+        twin, sim = self._twin(skill, emb)
         if twin is not None and sim >= self.dedupe_sim:
             if skill.reward <= twin.reward:
                 return None
             self._emit({"op": "drop", "id": twin.id})
-        sid = f"s{self._added}"
+        sid = uuid.uuid4().hex[:10]           # never reused after a revert, so trace references stay unambiguous
         self._emit({"op": "add", "skill": {"id": sid, "family": skill.family, "situation": skill.situation,
                                            "actions": list(skill.actions), "reward": skill.reward,
                                            "embedding": emb.tolist()}})

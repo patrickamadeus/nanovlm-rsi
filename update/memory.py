@@ -12,6 +12,7 @@ def situation(scored) -> str:
 class MemoryUpdater(Updater):
     def __init__(self, store: SkillStore, cfg):
         self.store, self.cfg = store, cfg
+        self._added: dict[int, list[str]] = {}    # revert_offset -> skill ids that commit actually wrote
 
     def propose(self, batch) -> Update | None:
         keep = [s for s in batch if s.reward >= self.cfg.mem_write_threshold and not s.flags]
@@ -27,15 +28,18 @@ class MemoryUpdater(Updater):
                       {"skills": skills, "revert_offset": self.store.offset()}, cost, provenance)
 
     def commit(self, update: Update) -> None:
-        for s in update.payload["skills"]:
-            self.store.append(Skill("", s["family"], s["situation"], tuple(s["actions"]), s["reward"],
-                                    self.store.embed_fn(s["situation"])))
+        added = [self.store.append(Skill("", s["family"], s["situation"], tuple(s["actions"]), s["reward"],
+                                         self.store.embed_fn(s["situation"]))) for s in update.payload["skills"]]
         self.store.expire()
+        self._added[update.payload["revert_offset"]] = [sid for sid in added if sid is not None]
 
     def revert(self, update: Update) -> None:
         self.store.truncate(update.payload["revert_offset"])
 
     def persisted(self, update: Update) -> bool:
+        """True only if this commit wrote at least one skill and all of them reload from disk.
+        A commit that deduped to nothing changed nothing durable, so it did not survive anything."""
+        added = self._added.get(update.payload["revert_offset"], [])
         fresh = SkillStore(self.store.path, self.store.embed_fn, self.store.max_size, self.store.dedupe_sim)
-        stored = {s.situation for s in fresh.skills()}
-        return all(s["situation"] in stored for s in update.payload["skills"])
+        stored = {s.id for s in fresh.skills()}
+        return bool(added) and all(sid in stored for sid in added)

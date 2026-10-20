@@ -33,9 +33,9 @@ def run_tasks(policy, env: Env, tasks: list[Task], trace: Trace, cfg: LoopConfig
     """Roll out each task once, read-only on memory, logging every rollout as cost."""
     trajs = []
     for task in tasks:
-        memory_text, ids = recall(store, env, task, cfg.mem_top_k)
+        memory_text, ids, secs = recall(store, env, task, cfg.mem_top_k)
         traj = rollout(policy, env, task, cfg, memory_text=memory_text)
-        trace.log_rollout(**rollout_record(traj, ids))
+        trace.log_rollout(**rollout_record(traj, ids, extra_seconds=secs))
         trajs.append(traj)
     return trajs
 

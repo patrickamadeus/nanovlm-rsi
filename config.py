@@ -36,6 +36,7 @@ class LoopConfig:
     mem_dedupe_sim: float = 0.95
     judge_sample_rate: float = 0.1
     run_dir: str = "runs/dev"
+    resume: bool = False           # reusing a non-empty run_dir is refused unless resuming on purpose
     seed: int = 0
     policy: PolicyConfig = field(default_factory=PolicyConfig)
 

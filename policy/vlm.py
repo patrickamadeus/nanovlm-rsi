@@ -64,13 +64,15 @@ class Policy:
         n_prompt = inputs["input_ids"].shape[1]
         # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T), which logprobs() reproduces
         out = self.model.generate(**inputs, do_sample=True, temperature=self.cfg.temperature, top_k=0, top_p=1.0,
-                                  max_new_tokens=self.cfg.max_new_tokens, output_logits=True,
-                                  return_dict_in_generate=True, pad_token_id=self.processor.tokenizer.pad_token_id)
-        ids = out.sequences[0, n_prompt:]
-        logits = torch.stack(out.logits, dim=1)[0].float() / self.cfg.temperature
-        lp = F.log_softmax(logits, dim=-1).gather(-1, ids[:, None])[:, 0]
+                                  max_new_tokens=self.cfg.max_new_tokens, return_dict_in_generate=True,
+                                  pad_token_id=self.processor.tokenizer.pad_token_id)
+        ids = out.sequences[0, n_prompt:].tolist()
+        # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the
+        # KV-cache decode drifts from a full pass by up to ~0.27 nats, which would put GRPO ratios
+        # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.
+        lp = self.logprobs(prompt, images, ids).float()
         text = self.processor.tokenizer.decode(ids, skip_special_tokens=True)
-        return RolloutStep(text, ids.tolist(), lp.cpu().numpy(), n_prompt)
+        return RolloutStep(text, ids, lp.cpu().numpy(), n_prompt)
 
     def logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int]) -> torch.Tensor:
         """Re-score an existing completion under current params; differentiable when params require grad."""

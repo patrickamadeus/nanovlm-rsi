@@ -22,6 +22,9 @@ class Trajectory:
     env_steps: int
     parse_fails: int
     tokens_out: int
+    tokens_in: int = 0         # prompt tokens: memory text makes prompts longer, so this is real cost
+    model_seconds: float = 0.0 # wall time inside policy calls, CUDA-synchronized
+    wall_ms: float = 0.0
 
 
 @dataclass(frozen=True)
