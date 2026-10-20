@@ -5,3 +5,4 @@ runs/
 checkpoints/
 wandb/
 .env
+.superpowers/
