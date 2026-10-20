@@ -47,3 +47,12 @@ def test_adapters_disabled_recovers_the_base_model_exactly():
     assert not torch.allclose(model["text_model"]["q_proj"](x), before)
     with adapters_disabled(model):
         torch.testing.assert_close(model["text_model"]["q_proj"](x), before)
+
+
+def test_adapters_stay_float32_on_a_bfloat16_base():
+    # bf16 has ~3 significant digits: an AdamW step of 1e-4 on a bf16 adapter mostly rounds to nothing
+    base = nn.Linear(6, 4).to(torch.bfloat16)
+    layer = LoRALinear(base, r=2, alpha=4)
+    assert layer.A.dtype == layer.B.dtype == torch.float32
+    out = layer(torch.randn(3, 6, dtype=torch.bfloat16))
+    assert out.dtype == torch.bfloat16

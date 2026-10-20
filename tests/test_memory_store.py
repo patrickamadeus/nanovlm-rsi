@@ -5,7 +5,7 @@ from tests.conftest import fake_embed
 
 
 def skill(situation, reward=1.0):
-    return Skill(id="", family="count_objects", situation=situation, actions=("say_3",),
+    return Skill(id="", family="count_objects", situation=situation, actions=("3",),
                  reward=reward, embedding=fake_embed(situation), uses=0, uses_before_success=0)
 
 
@@ -81,5 +81,5 @@ def test_as_text_lists_situation_and_actions(tmp_path):
     store = make(tmp_path)
     store.append(skill("count three shapes"))
     text = store.as_text(store.retrieve("count", 1))
-    assert "count three shapes" in text and "say_3" in text
+    assert "count three shapes" in text and "3" in text
     assert store.as_text([]) == ""

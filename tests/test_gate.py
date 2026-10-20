@@ -33,7 +33,7 @@ def setup(tmp_path):
     store = SkillStore(str(tmp_path / "skills.jsonl"), embed_fn=fake_embed)
     cfg = LoopConfig(gate_n=4, run_dir=str(tmp_path))
     up = MemoryUpdater(store, cfg)
-    t = Trajectory(TASK, [{"action": "say_3", "obs_text": "count the squares"}], 1.0, 1, 0, 3)
+    t = Trajectory(TASK, [{"action": "3", "obs_text": "count the squares"}], 1.0, 1, 0, 3)
     update = up.propose([ScoredTrajectory(t, 1.0, None, "outcome", 1.0, ())])
     return up, update, StaticEnv(), cfg, store
 

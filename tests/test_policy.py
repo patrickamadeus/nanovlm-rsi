@@ -63,3 +63,15 @@ def test_empty_prefix_restores_free_reasoning(tiny):
         assert tiny._format("hello", n_images=1).rstrip().endswith("Assistant:")
     finally:
         tiny.cfg.response_prefix = "ACT:"
+
+
+def test_generation_stops_at_the_end_of_the_action_line(tiny):
+    nl = tiny.processor.tokenizer("\n", add_special_tokens=False).input_ids[0]
+    assert nl in tiny.stop_ids
+    tiny.cfg.max_new_tokens = 40
+    try:
+        for _ in range(5):
+            ids = tiny.act("hello", IMG).token_ids
+            assert nl not in ids[:-1]          # nothing is generated past the first newline
+    finally:
+        tiny.cfg.max_new_tokens = 8

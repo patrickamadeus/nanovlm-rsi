@@ -14,7 +14,7 @@ gather_task = next(t for t in _train if t.family == "gather_order")
 
 
 def test_rollout_records_one_step_per_action():
-    tr = rollout(ScriptedPolicy([f"ACT: say_{count_task.goal[0]}"]), env, count_task, cfg)
+    tr = rollout(ScriptedPolicy([f"ACT: {count_task.goal[0]}"]), env, count_task, cfg)
     assert tr.env_steps == 1 and tr.total_reward == 1.0 and tr.parse_fails == 0
 
 
@@ -37,6 +37,6 @@ def test_rollout_never_exceeds_task_budget():
 
 
 def test_memory_text_reaches_the_prompt():
-    p = ScriptedPolicy([f"ACT: say_{count_task.goal[0]}"])
+    p = ScriptedPolicy([f"ACT: {count_task.goal[0]}"])
     rollout(p, env, count_task, cfg, memory_text="RECALL: count shapes")
     assert "RECALL: count shapes" in p.prompts[0]

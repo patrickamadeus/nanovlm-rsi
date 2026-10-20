@@ -16,12 +16,12 @@ from tests.conftest import ScriptedPolicy, fake_embed
 from update.memory import MemoryUpdater
 from verify import ScoredTrajectory, Trajectory
 
-OBS = "How many blue squares are there? Answer with say_N."
+OBS = "How many blue squares are there? Answer with the number."
 
 
 def _scored(answer, seed):
     t = Task("count_objects", seed, (answer,), 1, "train")
-    traj = Trajectory(t, [{"action": f"say_{answer}", "obs_text": OBS}], 1.0, 1, 0, 3)
+    traj = Trajectory(t, [{"action": f"{answer}", "obs_text": OBS}], 1.0, 1, 0, 3)
     return ScoredTrajectory(traj, 1.0, None, "outcome", 1.0, ())
 
 
@@ -102,7 +102,7 @@ def test_store_write_after_truncated_tail_survives_reload(tmp_path):
 def test_rollout_cost_counts_prompt_tokens_and_model_time():
     env = StaticEnv()
     task = env.tasks("train", 1, np.random.default_rng(0))[0]
-    rec = rollout_record(rollout(ScriptedPolicy(["ACT: say_3"] * 30), env, task, LoopConfig()), [])
+    rec = rollout_record(rollout(ScriptedPolicy(["ACT: 3"] * 30), env, task, LoopConfig()), [])
     assert rec["tokens_in"] > 0 and rec["gpu_seconds"] > 0 and "wall_ms" in rec
 
 

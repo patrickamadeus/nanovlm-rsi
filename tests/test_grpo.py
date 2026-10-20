@@ -55,7 +55,7 @@ def setup(tmp_path):
 
 def _traj(policy, task, reward, prompt="count the squares"):
     step = policy.act(prompt, [IMG])
-    s = {"action": "say_3", "obs_text": prompt, "prompt": prompt, "rgb": IMG,
+    s = {"action": "3", "obs_text": prompt, "prompt": prompt, "rgb": IMG,
          "token_ids": step.token_ids, "logprobs": step.logprobs}
     t = Trajectory(task, [s], reward, 1, 0, len(step.token_ids))
     return ScoredTrajectory(t, reward, None, "outcome", 1.0, ())

@@ -51,6 +51,8 @@ class Policy:
             self.model = AutoModelForImageTextToText.from_pretrained(cfg.model_id, dtype=dtype)
         self.model.to(self.device).eval().requires_grad_(False)   # nothing trains unless a carrier opts in
         self.mode, self.reference = "frozen", None
+        tok = self.processor.tokenizer
+        self.stop_ids = [tok.eos_token_id] + (tok("\n", add_special_tokens=False).input_ids if cfg.stop_at_newline else [])
 
     def enable_lora(self, r: int, alpha: float) -> list[str]:
         self.mode = "lora"
@@ -111,7 +113,8 @@ class Policy:
                     # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T)
                     dict(do_sample=True, temperature=self.cfg.temperature, top_k=0, top_p=1.0))
         out = self.model.generate(**inputs, **sampling, max_new_tokens=self.cfg.max_new_tokens,
-                                  return_dict_in_generate=True, pad_token_id=self.processor.tokenizer.pad_token_id)
+                                  eos_token_id=self.stop_ids, return_dict_in_generate=True,
+                                  pad_token_id=self.processor.tokenizer.pad_token_id)
         ids = out.sequences[0, n_prompt:].tolist()
         # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the
         # KV-cache decode drifts from a full pass by up to ~0.27 nats, which would put GRPO ratios

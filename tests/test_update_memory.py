@@ -10,11 +10,11 @@ from update.memory import MemoryUpdater
 from verify import ScoredTrajectory, Trajectory
 
 COUNT = Task("count_objects", 2, ("3",), 1, "train")
-OBS_TEXT = "How many blue squares are there? Answer with say_N."
+OBS_TEXT = "How many blue squares are there? Answer with the number."
 
 
 def scored(reward=1.0, parse_fail=False, flags=(), task=COUNT):
-    step = {"action": None if parse_fail else "say_3", "obs_text": OBS_TEXT}
+    step = {"action": None if parse_fail else "3", "obs_text": OBS_TEXT}
     t = Trajectory(task, [step], reward, 0 if parse_fail else 1, int(parse_fail), 4)
     return ScoredTrajectory(t, reward, None, "outcome", 1.0, tuple(flags))
 

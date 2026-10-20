@@ -26,7 +26,7 @@ from verify import make_verifier
 
 def make_env(cfg: LoopConfig) -> Env:
     if cfg.env == "static":
-        return StaticEnv(env_seed=cfg.env_seed, heldout_n=cfg.heldout_n)
+        return StaticEnv(env_seed=cfg.env_seed, heldout_n=cfg.heldout_n, families=cfg.static_families)
     if cfg.env == "craftax":
         from envs.craftax import CraftaxEnv          # imported lazily: JAX loads only when Craftax is used
         return CraftaxEnv(env_seed=cfg.env_seed, heldout_n=cfg.heldout_n, budget=cfg.craftax_budget)
@@ -116,7 +116,9 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
 def main():
     ap = argparse.ArgumentParser(description="Run one RSI loop. Every LoopConfig field is a flag.")
     for f in fields(LoopConfig):
-        if f.type is bool:
+        if f.type == tuple[str, ...]:
+            ap.add_argument(f"--{f.name}", type=lambda s: tuple(x for x in s.split(",") if x))
+        elif f.type is bool:
             ap.add_argument(f"--{f.name}", type=lambda s: s.lower() in ("1", "true", "yes"))
         elif f.type in (int, float, str):
             ap.add_argument(f"--{f.name}", type=f.type)

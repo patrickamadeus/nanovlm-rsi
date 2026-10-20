@@ -25,10 +25,10 @@ def test_count_objects_rewards_correct_answer_only():
     env = StaticEnv()
     t = _first(env, "count_objects")
     env.reset(t)
-    _, r_bad, done, _ = env.step("say_9" if t.goal[0] != "9" else "say_1")
+    _, r_bad, done, _ = env.step("9" if t.goal[0] != "9" else "1")
     assert r_bad == 0.0 and done is True
     env.reset(t)
-    _, r_good, done, _ = env.step(f"say_{t.goal[0]}")
+    _, r_good, done, _ = env.step(f"{t.goal[0]}")
     assert r_good == 1.0 and done is True
 
 
@@ -75,3 +75,9 @@ def test_heldout_is_frozen_per_env_seed():
     assert a == b
     c = StaticEnv(env_seed=4).tasks("heldout", 200, np.random.default_rng(99))
     assert a != c
+
+
+def test_families_can_be_restricted_for_a_focused_experiment():
+    env = StaticEnv(families=("count_objects",))
+    for split in ("train", "gate", "heldout"):
+        assert {t.family for t in env.tasks(split, 40, np.random.default_rng(0))} == {"count_objects"}

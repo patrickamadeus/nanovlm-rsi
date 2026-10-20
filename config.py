@@ -11,6 +11,7 @@ class PolicyConfig:
     dtype: str = "bfloat16"
     device: str = "auto"           # "auto" picks cuda when available
     scaffold_path: str = "scaffolds/v0.txt"
+    stop_at_newline: bool = True   # the action is one line; generating past it is wasted compute and noisy GRPO tokens
     response_prefix: str = "ACT:"  # prefilled assistant turn: 39/40 parseable vs 4/40 without, for a 256M model.
                                    # "" restores free reasoning before the ACT: line, for larger policies
 
@@ -31,6 +32,7 @@ class LoopConfig:
     verifier: str = "outcome"      # "outcome" | "judge" | "composite"
     env_seed: int = 0              # fixes the frozen held-out set
     craftax_budget: int = 64       # env steps per Craftax episode
+    static_families: tuple[str, ...] = ("count_objects", "gather_order")
     heldout_n: int = 200
     gate_n: int = 32               # tasks drawn from the gate split per accept/reject decision
     eval_every: int = 5

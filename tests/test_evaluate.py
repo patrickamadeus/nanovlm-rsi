@@ -24,7 +24,7 @@ def trace(tmp_path):
 
 
 def say3():
-    return ScriptedPolicy(iter(lambda: "ACT: say_3", None))
+    return ScriptedPolicy(iter(lambda: "ACT: 3", None))
 
 
 def test_evaluate_reports_both_heldout_axes_separately(trace):
@@ -36,7 +36,7 @@ def test_evaluate_reports_both_heldout_axes_separately(trace):
 
 def test_evaluate_does_not_write_to_the_store(trace, tmp_path):
     store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
-    store.append(Skill("", "count_objects", "count", ("say_3",), 1.0, fake_embed("count")))
+    store.append(Skill("", "count_objects", "count", ("3",), 1.0, fake_embed("count")))
     before = (tmp_path / "s.jsonl").read_bytes()
     evaluate(say3(), env, GOAL3, trace, LoopConfig(), store=store)
     assert (tmp_path / "s.jsonl").read_bytes() == before

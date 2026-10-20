@@ -232,14 +232,15 @@ class LoRALinear(nn.Module):
         self.base, self.scale, self.enabled = base, alpha / r, True
         base.requires_grad_(False)
         w = base.weight
-        self.A = nn.Parameter(torch.empty(r, base.in_features, device=w.device, dtype=w.dtype))
-        self.B = nn.Parameter(torch.zeros(base.out_features, r, device=w.device, dtype=w.dtype))
+        # adapters train in fp32 even on a bf16 base: bf16 would round most optimizer steps away
+        self.A = nn.Parameter(torch.empty(r, base.in_features, device=w.device, dtype=torch.float32))
+        self.B = nn.Parameter(torch.zeros(base.out_features, r, device=w.device, dtype=torch.float32))
         nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.base(x)
         if self.enabled:
-            out = out + (x @ self.A.T @ self.B.T) * self.scale
+            out = out + ((x.to(self.A.dtype) @ self.A.T @ self.B.T) * self.scale).to(out.dtype)
         return out
 
 # ================================================================================================

@@ -1,7 +1,7 @@
 """From-scratch procedural verifiable tasks, pure numpy. Runs on CPU in seconds; the CI env.
 
 Two families, so the act loop is real even without a simulator:
-  count_objects  single step  — count the squares, answer say_N
+  count_objects  single step  — count the squares, answer with the number
   gather_order   multi step   — walk an 8x8 grid and pick 3 objects in a required order
 Every task is a pure function of its seed, so a Task fully reproduces its world.
 """
@@ -17,9 +17,9 @@ MOVES = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 GATHER_BUDGET = 24
 
 
-def make_task(seed: int) -> Task:
+def make_task(seed: int, families: tuple[str, ...] = ("count_objects", "gather_order")) -> Task:
     rng = np.random.default_rng(seed)
-    if seed % 2 == 0:
+    if families[seed % len(families)] == "count_objects":
         n = int(rng.integers(1, 10))
         return Task("count_objects", seed, (str(n),), 1, split_for_seed(seed))
     order = tuple(str(c) for c in rng.choice(list(COLORS), size=3, replace=False))
@@ -39,17 +39,20 @@ def render(cells: dict[tuple[int, int], tuple[int, int, int]], agent: tuple[int,
 
 
 class StaticEnv(SeededTasks, Env):
-    families = {"count_objects", "gather_order"}     # goals with a programmatic checker
-    def __init__(self, env_seed: int = 0, heldout_n: int = 200):
+    def __init__(self, env_seed: int = 0, heldout_n: int = 200,
+                 families: tuple[str, ...] = ("count_objects", "gather_order")):
         self.env_seed, self.heldout_n = env_seed, heldout_n
+        self.families = set(families)                 # goals with a programmatic checker
+        self._families = tuple(families)
         self._task: Task | None = None
 
     def make_task(self, seed: int) -> Task:
-        return make_task(seed)
+        return make_task(seed, self._families)
 
     @property
     def actions(self) -> list[str]:
-        return [f"say_{i}" for i in range(10)] + list(MOVES) + ["pick"]
+        # count answers are bare digits: that is what a VLM naturally says when asked "how many?"
+        return [str(i) for i in range(10)] + list(MOVES) + ["pick"]
 
     def reset(self, task: Task) -> Obs:
         self._task, self._steps = task, 0
@@ -68,7 +71,7 @@ class StaticEnv(SeededTasks, Env):
         self._steps += 1
         reward, done = 0.0, False
         if task.family == "count_objects":
-            reward, done = float(action == f"say_{task.goal[0]}"), True
+            reward, done = float(action == task.goal[0]), True
         elif action in MOVES:
             dr, dc = MOVES[action]
             r, c = self._agent
@@ -91,7 +94,7 @@ class StaticEnv(SeededTasks, Env):
     def _obs(self) -> Obs:
         task = self._task
         if task.family == "count_objects":
-            return Obs(render(self._squares), "How many blue squares are there? Answer with say_N.")
+            return Obs(render(self._squares), "How many blue squares are there? Answer with the number.")
         cells = {pos: COLORS[color] for color, pos in self._objects.items()}
         got = ", ".join(self._collected) or "nothing"
         text = (f"You are the white frame. Pick up objects in this order: {', '.join(task.goal)}. "

@@ -21,7 +21,7 @@ class FakeJudge:
 
 
 def traj(task=NATIVE, reward=1.0):
-    steps = [{"action": "say_3", "obs_text": "How many blue squares are there?"}]
+    steps = [{"action": "3", "obs_text": "How many blue squares are there?"}]
     return Trajectory(task, steps, reward, 1, 0, 2, final_rgb=IMG)
 
 
@@ -35,7 +35,7 @@ def test_judge_verdict_comes_from_p_yes_with_confidence():
 def test_judge_prompt_shows_goal_context_and_the_agents_actions():
     j = FakeJudge(0.5)
     JudgeVerifier(j).score(traj())
-    assert "How many blue squares" in j.prompts[0] and "say_3" in j.prompts[0]
+    assert "How many blue squares" in j.prompts[0] and "3" in j.prompts[0]
 
 
 def test_composite_routes_env_native_goals_to_outcome():
