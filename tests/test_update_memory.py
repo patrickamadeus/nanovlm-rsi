@@ -68,9 +68,7 @@ def test_make_updater_memory_builds_store_in_run_dir(tmp_path):
     assert isinstance(up, MemoryUpdater) and up.store.path.startswith(str(tmp_path))
 
 
-def test_weights_and_scaffold_carriers_not_yet_available(tmp_path):
+def test_scaffold_carrier_not_yet_available(tmp_path):
     cfg = LoopConfig(run_dir=str(tmp_path))
-    with pytest.raises(NotImplementedError, match="Slice 2"):
-        make_updater("weights", ScriptedPolicy([]), cfg)
     with pytest.raises(NotImplementedError, match="Slice 6"):
         make_updater("scaffold", ScriptedPolicy([]), cfg)

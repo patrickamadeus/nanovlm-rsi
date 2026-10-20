@@ -1,0 +1,108 @@
+import os
+
+import numpy as np
+import pytest
+import torch
+
+from config import LoopConfig, PolicyConfig
+from envs.base import Task
+from update.weights import WeightsUpdater, group_advantages, grpo_token_loss
+from verify import ScoredTrajectory, Trajectory
+
+
+def test_group_advantages_are_relative_within_each_task_group():
+    adv = group_advantages([1.0, 0.0, 0.0, 1.0, 1.0, 0.0], ["a", "a", "b", "b", "c", "c"])
+    np.testing.assert_allclose(adv, [1, -1, -1, 1, 1, -1], atol=1e-4)
+
+
+def test_all_equal_groups_are_discarded_as_nan():
+    adv = group_advantages([1.0, 1.0, 0.0, 1.0], ["a", "a", "b", "b"])
+    assert np.isnan(adv[:2]).all() and not np.isnan(adv[2:]).any()
+
+
+def test_unclipped_gradient_matches_the_analytic_policy_gradient():
+    lp_new = torch.tensor([-1.0, -2.0], requires_grad=True)
+    lp_old = lp_new.detach().clone()
+    loss = grpo_token_loss(lp_new, lp_old, None, adv=0.5, clip=0.2, beta=0.0).sum()
+    loss.backward()
+    torch.testing.assert_close(lp_new.grad, torch.tensor([-0.5, -0.5]))   # d(-ratio*A)/d lp at ratio 1
+
+
+def test_clipped_ratio_has_no_gradient_for_positive_advantage():
+    lp_old = torch.tensor([-2.0])
+    lp_new = (lp_old + 1.0).requires_grad_(True)                         # ratio e^1 > 1.2
+    grpo_token_loss(lp_new, lp_old, None, adv=1.0, clip=0.2, beta=0.0).sum().backward()
+    assert lp_new.grad.abs().item() == 0.0
+
+
+def test_k3_kl_is_zero_at_reference_and_positive_away_from_it():
+    lp = torch.tensor([-1.0, -2.0])
+    same = grpo_token_loss(lp, lp, lp, adv=0.0, clip=0.2, beta=1.0)
+    away = grpo_token_loss(lp, lp, lp - 0.5, adv=0.0, clip=0.2, beta=1.0)
+    assert torch.allclose(same, torch.zeros(2)) and (away > 0).all()
+
+
+IMG = np.zeros((64, 64, 3), np.uint8)
+
+
+@pytest.fixture
+def setup(tmp_path):
+    from policy.vlm import Policy
+    policy = Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=6))
+    cfg = LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, grpo_beta=0.0)
+    return policy, WeightsUpdater(policy, cfg), cfg
+
+
+def _traj(policy, task, reward, prompt="count the squares"):
+    step = policy.act(prompt, [IMG])
+    s = {"action": "say_3", "obs_text": prompt, "prompt": prompt, "rgb": IMG,
+         "token_ids": step.token_ids, "logprobs": step.logprobs}
+    t = Trajectory(task, [s], reward, 1, 0, len(step.token_ids))
+    return ScoredTrajectory(t, reward, None, "outcome", 1.0, ())
+
+
+def _batch(policy):
+    task = Task("count_objects", 2, ("3",), 1, "train")
+    return [_traj(policy, task, 1.0), _traj(policy, task, 0.0)]
+
+
+def test_lora_is_enabled_and_only_adapters_train(setup):
+    policy, up, _ = setup
+    trainable = [n for n, p in policy.model.named_parameters() if p.requires_grad]
+    assert trainable and all(n.endswith((".A", ".B")) and "text_model" in n for n in trainable)
+
+
+def test_update_carries_weights_carrier_labels(setup):
+    policy, up, _ = setup
+    u = up.propose(_batch(policy))
+    assert (u.carrier, u.role, u.horizon) == ("A5", "B0", "C3") and u.provenance
+
+
+def test_degenerate_batch_proposes_nothing(setup):
+    policy, up, _ = setup
+    task = Task("count_objects", 2, ("3",), 1, "train")
+    assert up.propose([_traj(policy, task, 0.0), _traj(policy, task, 0.0)]) is None
+    assert up.propose([]) is None
+
+
+def test_one_grpo_step_makes_the_rewarded_completion_more_likely(setup):
+    policy, up, _ = setup
+    batch = _batch(policy)
+    good = batch[0].traj.steps[0]
+    before = policy.logprobs(good["prompt"], [IMG], good["token_ids"]).sum().item()
+    up.commit(up.propose(batch))
+    after = policy.logprobs(good["prompt"], [IMG], good["token_ids"]).sum().item()
+    assert after > before
+
+
+def test_commit_persists_and_revert_restores_exactly(setup):
+    policy, up, cfg = setup
+    snap = policy.snapshot()
+    u = up.propose(_batch(policy))
+    up.commit(u)
+    assert os.path.exists(os.path.join(cfg.run_dir, "weights.safetensors"))
+    assert up.persisted(u)
+    up.revert(u)
+    for n, v in policy.snapshot().items():
+        torch.testing.assert_close(v, snap[n])
+    assert not up.persisted(u)             # what is on disk is the pre-update state again

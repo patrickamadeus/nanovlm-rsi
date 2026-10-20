@@ -12,6 +12,7 @@ from PIL import Image
 from transformers import AutoConfig, AutoModelForImageTextToText, AutoProcessor
 
 from config import PolicyConfig
+from policy.lora import adapters_disabled, apply_lora
 
 IMAGE = "<image>"
 
@@ -49,6 +50,32 @@ class Policy:
         else:
             self.model = AutoModelForImageTextToText.from_pretrained(cfg.model_id, dtype=dtype)
         self.model.to(self.device).eval().requires_grad_(False)   # nothing trains unless a carrier opts in
+        self.mode, self.reference = "frozen", None
+
+    def enable_lora(self, r: int, alpha: float) -> list[str]:
+        self.mode = "lora"
+        return apply_lora(self.model, r, alpha)
+
+    def enable_full(self, keep_reference: bool) -> None:
+        """Train every language-model weight. The KL term then needs a frozen copy of the initial model."""
+        import copy
+        self.mode = "full"
+        if keep_reference:
+            self.reference = copy.deepcopy(self.model).requires_grad_(False)
+        for n, p in self.model.named_parameters():
+            p.requires_grad_("text_model" in n)
+
+    @torch.no_grad()
+    def reference_logprobs(self, prompt: str, images: list[np.ndarray], token_ids: list[int]) -> torch.Tensor:
+        """Logprobs under pi_init: LoRA adapters switched off, or the frozen copy in full mode."""
+        if self.mode == "lora":
+            with adapters_disabled(self.model):
+                return self.logprobs(prompt, images, token_ids)
+        model, self.model = self.model, self.reference
+        try:
+            return self.logprobs(prompt, images, token_ids)
+        finally:
+            self.model = model
 
     def _format(self, prompt: str, n_images: int) -> str:
         """Wrap the rendered scaffold as one user turn in the model's chat template, then prefill the reply."""

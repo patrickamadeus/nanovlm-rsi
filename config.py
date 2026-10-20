@@ -32,6 +32,13 @@ class LoopConfig:
     gate_enabled: bool = True      # disabling is allowed for ablations, and is recorded in the trace
     gate_parse_fail_delta: float = 0.05
     gate_allowed_verdict_sources: tuple[str, ...] = ("outcome",)  # signals that would exist at deployment
+    grpo_mode: str = "lora"        # "lora" (one 24GB card) | "full"
+    grpo_lr: float = 1e-4
+    grpo_clip: float = 0.2
+    grpo_beta: float = 0.04        # KL-to-init coefficient; 0 disables the reference pass
+    grpo_max_grad_norm: float = 1.0
+    lora_r: int = 8
+    lora_alpha: float = 16
     mem_write_threshold: float = 1.0
     mem_top_k: int = 3
     mem_max_size: int = 500

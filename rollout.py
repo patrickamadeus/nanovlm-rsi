@@ -21,6 +21,11 @@ def timed(fn, *args):
     return out, time.perf_counter() - t0
 
 
+def _replay(prompt, rgb, gen) -> dict:
+    """What the weights carrier needs to re-score this turn: exact prompt, image, tokens, pi_old logprobs."""
+    return {"prompt": prompt, "rgb": rgb, "token_ids": gen.token_ids, "logprobs": gen.logprobs}
+
+
 def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str = "") -> Trajectory:
     t_start = time.perf_counter()
     template = load_scaffold(cfg.policy.scaffold_path)
@@ -36,13 +41,14 @@ def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str =
         if action is None:     # a failed parse is a wasted turn, never an env call
             parse_fails += 1
             steps.append({"action": None, "reward": 0.0, "shaping": PARSE_FAIL_SHAPING, "text": gen.text,
-                          "obs_text": obs.text})
+                          "obs_text": obs.text, **_replay(prompt, obs.rgb, gen)})
             continue
-        seen = obs.text
+        seen, rgb = obs.text, obs.rgb
         obs, reward, done, _ = env.step(action)
         env_steps += 1
         total += reward
-        steps.append({"action": action, "reward": reward, "shaping": 0.0, "text": gen.text, "obs_text": seen})
+        steps.append({"action": action, "reward": reward, "shaping": 0.0, "text": gen.text, "obs_text": seen,
+                      **_replay(prompt, rgb, gen)})
         if done:
             break
     return Trajectory(task, steps, total, env_steps, parse_fails, tokens_out, tokens_in, model_s,
