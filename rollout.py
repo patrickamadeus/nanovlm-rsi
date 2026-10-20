@@ -30,3 +30,19 @@ def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str =
         if done:
             break
     return Trajectory(task, steps, total, env_steps, parse_fails, tokens_out)
+
+
+def recall(store, env: Env, task: Task, k: int) -> tuple[str, list[str]]:
+    """Retrieve skills keyed exactly the way the memory carrier wrote them: by the first observation's text."""
+    if store is None or len(store) == 0 or k <= 0:
+        return "", []
+    skills = store.retrieve(env.reset(task).text or "", k)
+    return store.as_text(skills), [s.id for s in skills]
+
+
+def rollout_record(traj: Trajectory, retrieved_ids: list[str], verdict_source: str = "outcome") -> dict:
+    t = traj.task
+    return dict(task_id=f"{t.family}:{t.seed}", family=t.family, seed=t.seed, split=t.split, goal=list(t.goal),
+                reward=traj.total_reward, verdict_source=verdict_source, parse_fail=traj.parse_fails > 0,
+                parse_fails=traj.parse_fails, retrieved_skill_ids=retrieved_ids, env_steps=traj.env_steps,
+                tokens_out=traj.tokens_out)
