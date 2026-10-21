@@ -83,7 +83,7 @@ runs, generated from the real source.
 ## Quickstart
 
 ```bash
-git clone https://github.com/OWNER/nanovlm-rsi && cd nanovlm-rsi
+git clone https://github.com/patrickai0309/nanovlm-rsi && cd nanovlm-rsi
 uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"                  # or: pip install -e ".[dev]"
 
@@ -164,6 +164,17 @@ Same rule as nanoVLM: **no framework may own the control flow**. No `trl`, `peft
 or RL libraries. New carriers, environments and verifiers are very welcome. Each one should be one
 file behind the existing interface, with tests.
 
+## Citation
+
+```bibtex
+@misc{irawan2026nanovlmrsi,
+  author       = {Patrick Amadeus Irawan},
+  title        = {nanoVLM-RSI: The simplest harness for multimodal recursive self-improvement},
+  year         = {2026},
+  howpublished = {\url{https://github.com/patrickai0309/nanovlm-rsi}}
+}
+```
+
 ## License
 
-Apache-2.0.
+Apache-2.0. See [`LICENSE`](LICENSE).
