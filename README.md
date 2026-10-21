@@ -15,7 +15,40 @@ where a loop closes on CPU in under a minute, and a new experiment is one config
 
 ## Result
 
-<!-- RESULTS -->
+GRPO, written from scratch, teaches SmolVLM-256M to count objects in images it has never seen.
+The run took 77 minutes on one A40.
+
+![held-out success vs GPU seconds](assets/headline.png)
+
+| | before | after 100 iterations |
+|---|---:|---:|
+| **held-out success** (200 frozen tasks, new images) | **3.0%** | **51.5%** |
+| parse-failure rate | 38.0% | 0.5% |
+| success when the answer parsed | 4.8% | 51.8% |
+| **MMStar** (all 1,500; forgetting tripwire) | 25.9% | 28.5% |
+
+Setup: LoRA r=8, self-curriculum, `count_objects` only, 8 tasks × 8 rollouts per iteration. 59 of
+the 100 proposed updates passed the gate; the other 41 were reverted. Total cost: 13,772 env steps,
+2.6M policy tokens, 2,936 GPU-seconds of model time. The full trace is in
+`results/headline_trace.jsonl.gz`.
+
+Read it honestly:
+- **Part of the early gain is format.** The parse-failure rate fell from 38% to 0.5%. Success
+  *among parsed answers* rose from 4.8% to 51.8%, so the counting itself improved too. (Chance on
+  1–9 is about 11%.)
+- **No forgetting detected.** MMStar moved +2.5 points, which is within the noise of a 1,500-item
+  benchmark. It's measured with one 512px tile and a plain prompt, so it sits below SmolVLM's
+  published number; baseline and final use identical settings.
+- **One seed, one task family, no ablations yet.** All nine count goals are seen in training, so
+  this is the unseen-*image* axis, not unseen-goal generalization.
+
+Reproduce:
+
+```bash
+python rsi.py --update_rule weights --proposer self --static_families count_objects \
+    --iters 100 --tasks_per_iter 8 --group_size 8 --eval_every 10 --eval_n 200 --gate_n 32 \
+    --bench true --run_dir runs/headline
+```
 
 ## The loop
 
@@ -107,7 +140,7 @@ environment or carrier.
 
 The default policy is `HuggingFaceTB/SmolVLM-256M-Instruct` in bf16 with LoRA r=8 on the language
 model's q/v projections. The vision tower is frozen. The adapters train in fp32. One action takes
-about 0.16 s on an A40. Any HF image-text-to-text model works via `PolicyConfig.model_id`.
+about 0.16 s on an A40. Other HF image-text-to-text models load via `PolicyConfig.model_id`, but LoRA currently targets SmolVLM/Idefics3 module names (`text_model`), so other families need the LoRA scope adjusted (`policy/lora.py:apply_lora`).
 
 ## Status
 
