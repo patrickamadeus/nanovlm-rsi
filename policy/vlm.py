@@ -50,6 +50,8 @@ class Policy:
     def __init__(self, cfg: PolicyConfig):
         self.cfg = cfg
         self.device = ("cuda" if torch.cuda.is_available() else "cpu") if cfg.device == "auto" else cfg.device
+        if self.device == "cpu":                                   # many threads on tiny matmuls thrash (~300x slower)
+            torch.set_num_threads(min(torch.get_num_threads(), 8))
         self.processor = AutoProcessor.from_pretrained(cfg.model_id)
         dtype = getattr(torch, cfg.dtype)
         if cfg.image_side and not cfg.tiny:

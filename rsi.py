@@ -113,7 +113,10 @@ def rsi(cfg: LoopConfig, policy=None) -> EvalResult:
     return final
 
 
-def main():
+TINY = dict(tasks_per_iter=2, group_size=4, eval_every=1, eval_n=16, heldout_n=16, gate_n=8)   # --tiny: CPU-sized run
+
+
+def parse_cfg(argv=None) -> LoopConfig:
     ap = argparse.ArgumentParser(description="Run one RSI loop. Every LoopConfig field is a flag.")
     for f in fields(LoopConfig):
         if f.type == tuple[str, ...]:
@@ -122,12 +125,18 @@ def main():
             ap.add_argument(f"--{f.name}", type=lambda s: s.lower() in ("1", "true", "yes"))
         elif f.type in (int, float, str):
             ap.add_argument(f"--{f.name}", type=f.type)
-    ap.add_argument("--tiny", action="store_true", help="randomly-initialized tiny policy (CPU smoke run)")
-    args = vars(ap.parse_args())
+    ap.add_argument("--tiny", action="store_true", help="randomly-initialized tiny policy, CPU-sized run (smoke test)")
+    args = vars(ap.parse_args(argv))
     tiny = args.pop("tiny")
-    cfg = LoopConfig(**{k: v for k, v in args.items() if v is not None})
+    given = {k: v for k, v in args.items() if v is not None}
+    cfg = LoopConfig(**({**TINY, **given} if tiny else given))           # explicit flags beat tiny sizes
     if tiny:
         cfg.policy = PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=8)
+    return cfg
+
+
+def main():
+    cfg = parse_cfg()
     r = rsi(cfg)
     print(f"held-out success {r.success_rate:.3f}  (unseen seed {r.unseen_seed_rate:.3f}, "
           f"unseen goal {r.unseen_goal_rate:.3f})  parse_fail {r.parse_fail_rate:.3f}  "

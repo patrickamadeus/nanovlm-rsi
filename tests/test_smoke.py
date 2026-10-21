@@ -75,3 +75,12 @@ def test_weights_carrier_closes_the_loop_with_the_real_tiny_policy(tmp_path):
     updates = Trace(str(tmp_path)).records("update")
     assert any(u.get("carrier") == "A5" and "loss" in u for u in updates) or \
         all(u["reason"] == "no usable signal" for u in updates)
+
+
+def test_tiny_flag_shrinks_run_sizes_but_explicit_flags_win():
+    from rsi import parse_cfg
+    cfg = parse_cfg(["--tiny", "--iters", "2"])
+    assert cfg.policy.tiny and cfg.iters == 2
+    assert cfg.eval_n <= 16 and cfg.gate_n <= 8 and cfg.tasks_per_iter <= 2
+    assert parse_cfg(["--tiny", "--eval_n", "50"]).eval_n == 50
+    assert parse_cfg([]).eval_n == LoopConfig().eval_n          # real runs keep the real defaults

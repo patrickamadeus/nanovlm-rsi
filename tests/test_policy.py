@@ -93,3 +93,11 @@ def test_act_and_rescore_share_one_processed_input(tiny, monkeypatch):
     monkeypatch.setattr(tiny, "_inputs", lambda *a, **k: calls.append(1) or real(*a, **k))
     tiny.act("hello", IMG)
     assert len(calls) == 1
+
+
+def test_cpu_policy_caps_torch_threads():
+    # small matmuls on many threads thrash: 11 s/action at 96 threads vs 0.04 s at 8
+    import torch
+    torch.set_num_threads(64)
+    Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32"))
+    assert torch.get_num_threads() <= 8

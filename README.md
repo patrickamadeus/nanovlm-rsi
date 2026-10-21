@@ -88,7 +88,7 @@ uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"                  # or: pip install -e ".[dev]"
 
 pytest -q                                   # full suite, CPU
-python rsi.py --tiny --iters 2              # close a loop on CPU with a tiny random policy (~30 s)
+python rsi.py --tiny --iters 2              # close a loop on CPU with a tiny random policy (~1 min)
 python play.py --tiny                       # watch one episode, step by step
 ```
 
