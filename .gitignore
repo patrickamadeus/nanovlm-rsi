@@ -6,3 +6,4 @@ checkpoints/
 wandb/
 .env
 .superpowers/
+*.egg-info/

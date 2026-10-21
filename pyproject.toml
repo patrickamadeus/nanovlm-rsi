@@ -13,7 +13,7 @@ authors = [{ name = "Patrick Amadeus Irawan", email = "patrickai0309@gmail.com" 
 dependencies = ["torch", "numpy", "transformers>=4.50", "pillow", "safetensors"]
 
 [project.urls]
-Homepage = "https://github.com/patrickai0309/nanovlm-rsi"
+Homepage = "https://github.com/patrickamadeus/nanovlm-rsi"
 
 [project.optional-dependencies]
 craftax = ["jax", "craftax"]

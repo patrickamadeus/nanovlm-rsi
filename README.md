@@ -83,7 +83,7 @@ runs, generated from the real source.
 ## Quickstart
 
 ```bash
-git clone https://github.com/patrickai0309/nanovlm-rsi && cd nanovlm-rsi
+git clone https://github.com/patrickamadeus/nanovlm-rsi && cd nanovlm-rsi
 uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"                  # or: pip install -e ".[dev]"
 
@@ -171,7 +171,7 @@ file behind the existing interface, with tests.
   author       = {Patrick Amadeus Irawan},
   title        = {nanoVLM-RSI: The simplest harness for multimodal recursive self-improvement},
   year         = {2026},
-  howpublished = {\url{https://github.com/patrickai0309/nanovlm-rsi}}
+  howpublished = {\url{https://github.com/patrickamadeus/nanovlm-rsi}}
 }
 ```
 
