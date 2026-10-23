@@ -64,6 +64,9 @@ class Policy:
         self.mode, self.reference = "frozen", None
         tok = self.processor.tokenizer
         self.stop_ids = [tok.eos_token_id] + (tok("\n", add_special_tokens=False).input_ids if cfg.stop_at_newline else [])
+        # image placeholders are never valid output: one sampled <image> breaks the re-scoring forward pass
+        self.never = [i for i in tok.convert_tokens_to_ids(["<image>", "<fake_token_around_image>", "<global-img>"])
+                      if i is not None and i != tok.unk_token_id]
 
     def enable_lora(self, r: int, alpha: float) -> list[str]:
         self.mode = "lora"
@@ -124,7 +127,7 @@ class Policy:
                     # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T)
                     dict(do_sample=True, temperature=self.cfg.temperature, top_k=0, top_p=1.0))
         out = self.model.generate(**inputs, **sampling, max_new_tokens=self.cfg.max_new_tokens,
-                                  eos_token_id=self.stop_ids, return_dict_in_generate=True,
+                                  eos_token_id=self.stop_ids, suppress_tokens=self.never, return_dict_in_generate=True,
                                   pad_token_id=self.processor.tokenizer.pad_token_id)
         ids = out.sequences[0, n_prompt:].tolist()
         # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the

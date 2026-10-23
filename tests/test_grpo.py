@@ -54,17 +54,25 @@ def setup(tmp_path):
     return policy, GRPO(policy, cfg), cfg
 
 
-def _traj(policy, task, reward, prompt="count the squares"):
-    step = policy.act(prompt, [IMG])
+def _traj(policy, task, reward, prompt="count the squares", token_ids=None):
+    if token_ids is None:
+        token_ids = policy.act(prompt, [IMG]).token_ids
+    logprobs = policy.logprobs(prompt, [IMG], token_ids).detach().cpu().numpy()
     s = {"action": "3", "obs_text": prompt, "prompt": prompt, "rgb": IMG,
-         "token_ids": step.token_ids, "logprobs": step.logprobs}
-    t = Trajectory(task, [s], reward, 1, 0, len(step.token_ids))
+         "token_ids": token_ids, "logprobs": logprobs}
+    t = Trajectory(task, [s], reward, 1, 0, len(token_ids))
     return ScoredTrajectory(t, reward, None, "outcome", 1.0, ())
 
 
 def _batch(policy):
+    """A rewarded and a penalized completion that share no tokens, so pushing one down can't drag the
+    other with it — two independent samples from a tiny model often overlap, which made this flaky."""
     task = Task("count_objects", 2, ("3",), 1, "train")
-    return [_traj(policy, task, 1.0), _traj(policy, task, 0.0)]
+    good = _traj(policy, task, 1.0)
+    vocab = policy.model.get_output_embeddings().weight.shape[0]
+    used = set(good.traj.steps[0]["token_ids"]) | set(policy.never)
+    bad_ids = [i for i in range(10, vocab) if i not in used][:len(good.traj.steps[0]["token_ids"])]
+    return [good, _traj(policy, task, 0.0, token_ids=bad_ids)]
 
 
 def test_lora_is_enabled_and_only_adapters_train(setup):
