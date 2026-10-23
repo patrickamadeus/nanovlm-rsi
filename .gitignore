@@ -7,3 +7,5 @@ wandb/
 .env
 .superpowers/
 *.egg-info/
+build/
+dist/
