@@ -7,8 +7,8 @@ from rsi.memory import SkillStore
 from tests.conftest import ScriptedPolicy, fake_embed
 from rsi import make_update
 from rsi.memory import Memory
-from harness.rollout import Trajectory
-from judges.outcome import ScoredTrajectory
+from utils.rollout import Trajectory
+from rsi.judges import ScoredTrajectory
 
 COUNT = Task("count_objects", 2, ("3",), 1, "train")
 OBS_TEXT = "How many blue squares are there? Answer with the number."

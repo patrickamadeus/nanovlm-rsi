@@ -9,13 +9,13 @@ from envs.base import Task
 from envs.static import StaticEnv
 from rsi.gate import gate
 from rsi.memory import Skill, SkillStore
-from harness.log import Trace
-from harness.rollout import rollout, rollout_record
+from utils.log import Trace
+from utils.rollout import rollout, rollout_record
 from train import train
 from tests.conftest import ScriptedPolicy, fake_embed
 from rsi.memory import Memory
-from harness.rollout import Trajectory
-from judges.outcome import ScoredTrajectory
+from utils.rollout import Trajectory
+from rsi.judges import ScoredTrajectory
 
 OBS = "How many blue squares are there? Answer with the number."
 

@@ -1,7 +1,7 @@
 import os
 
-from harness.log import Cost, Trace
-from harness.plot import curves, plot_runs
+from utils.log import Cost, Trace
+from utils.plot import curves, plot_runs
 
 
 def _run(tmp_path, name, rates):

@@ -18,9 +18,9 @@ import numpy as np
 from configs.config import LoopConfig, load_config
 from envs import make_env
 from evaluate import EvalResult, evaluate, make_eval_fn
-from harness.log import Trace
-from harness.rollout import recall, rollout, rollout_record
-from judges import make_judge
+from utils.log import Trace
+from utils.rollout import recall, rollout, rollout_record
+from rsi import make_judge
 from models import make_policy
 from rsi import make_update
 from rsi.curriculum import make_curriculum
@@ -93,7 +93,7 @@ def git_sha() -> str:
 
 def parse_cfg(argv=None) -> LoopConfig:
     ap = argparse.ArgumentParser(description="Run one self-improvement loop.")
-    ap.add_argument("--config", default=None, help="a name in configs/ (count_grpo, tiny, ...) or a YAML path")
+    ap.add_argument("--config", default=None, help="a name in configs/yaml/ (count_grpo, tiny, ...) or a YAML path")
     for f in fields(LoopConfig):
         if str(f.type).startswith("tuple"):
             cast = float if "float" in str(f.type) else str

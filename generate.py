@@ -9,13 +9,13 @@ import numpy as np
 
 from configs.config import load_config
 from envs import make_env
-from harness.prompt import load_scaffold, parse_action, render
-from harness.rollout import SYSTEM
+from utils.prompt import load_scaffold, parse_action, render
+from utils.rollout import SYSTEM
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", help="a name in configs/ or a YAML path")
+    ap.add_argument("--config", help="a name in configs/yaml/ or a YAML path")
     ap.add_argument("--run", help="a finished run directory: use its config and trained weights")
     ap.add_argument("--split", default="train", choices=["train", "gate", "heldout"])
     ap.add_argument("--index", type=int, default=0, help="which task of the split to play")

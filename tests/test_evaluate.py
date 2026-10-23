@@ -7,7 +7,7 @@ from configs.config import LoopConfig
 from envs.static import StaticEnv
 from evaluate import evaluate, make_eval_fn
 from rsi.memory import Skill, SkillStore
-from harness.log import Trace
+from utils.log import Trace
 from tests.conftest import ScriptedPolicy, fake_embed
 
 env = StaticEnv()

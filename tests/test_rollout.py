@@ -3,7 +3,7 @@ import pytest
 
 from configs.config import LoopConfig
 from envs.static import StaticEnv
-from harness.rollout import rollout
+from utils.rollout import rollout
 from tests.conftest import ScriptedPolicy
 
 cfg = LoopConfig()

@@ -4,8 +4,8 @@ from PIL import Image
 
 from configs.config import LoopConfig, PolicyConfig
 from evaluate import load_run
-from harness.lmms import answer
-from harness.log import Trace
+from utils.lmms import answer
+from utils.log import Trace
 from tests.conftest import ScriptedPolicy
 
 

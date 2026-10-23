@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from harness.log import Cost, heal_tail
+from utils.log import Cost, heal_tail
 from rsi.gate import Update
 
 

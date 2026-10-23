@@ -7,8 +7,8 @@ import torch
 from configs.config import LoopConfig, PolicyConfig
 from envs.base import Task
 from rsi.grpo import GRPO, group_advantages, grpo_token_loss
-from harness.rollout import Trajectory
-from judges.outcome import ScoredTrajectory
+from utils.rollout import Trajectory
+from rsi.judges import ScoredTrajectory
 
 
 def test_group_advantages_are_relative_within_each_task_group():

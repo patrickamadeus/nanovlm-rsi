@@ -3,7 +3,7 @@
   held-out   our own frozen env tasks — the in-domain claim. Two axes, reported separately:
              unseen_seed_rate (goal seen in training, new image) and unseen_goal_rate (goal never trained on)
   benchmarks standard VLM benchmarks through lmms-eval (MMStar by default) — the forgetting check.
-             lmms-eval runs our policy directly (harness/lmms.py), trained LoRA included.
+             lmms-eval runs our policy directly (utils/lmms.py), trained LoRA included.
 
     python evaluate.py --run runs/count_grpo                          # held-out, the run's final weights
     python evaluate.py --run runs/count_grpo --benchmarks mmstar      # needs: pip install -e ".[eval]"
@@ -17,8 +17,8 @@ import numpy as np
 
 from configs.config import LoopConfig, load_config
 from envs.base import Env, Task
-from harness.log import Cost, Trace
-from harness.rollout import recall, rollout, rollout_record
+from utils.log import Cost, Trace
+from utils.rollout import recall, rollout, rollout_record
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,7 @@ def main():
     out = os.path.join(args.run or "runs/base", "eval")
 
     if args.benchmarks:
-        from harness.lmms import run_benchmarks
+        from utils.lmms import run_benchmarks
         scores = run_benchmarks(policy, args.benchmarks.split(","), args.limit)
         Trace(out).log_eval(split="benchmarks", scores=scores, limit=args.limit, run=args.run)
         for task, metrics in scores.items():

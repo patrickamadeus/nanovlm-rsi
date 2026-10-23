@@ -17,15 +17,15 @@ no framework owning the control flow.
 train.py        the loop, top to bottom — read this first
 evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
 generate.py     watch the policy act on one task, step by step
-configs/        config.py (every knob) + one YAML per experiment
+configs/        config.py (every knob) + yaml/ (one file per experiment)
 models/         smolvlm.py (the policy: act / logprobs / embed), lora.py (from scratch)
 envs/           static.py (numpy count & gather tasks, CPU), craftax.py (open-world, optional)
-judges/         outcome.py (env ground truth), vlm.py (a separate VLM as judge, + composite)
-rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice), gate.py (what is kept)
-harness/        rollout.py (one episode), prompt.py + scaffolds/ (the prompt template), log.py, plot.py
+rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice),
+                judges.py (how it's scored), gate.py (what is kept)
+utils/          rollout.py (one episode), prompt.py + scaffold.txt (the prompt), log.py, plot.py, lmms.py
 ```
 
-Each folder's `__init__.py` maps a config name to a file, so every choice is one line of YAML:
+`envs/__init__.py` and `rsi/__init__.py` map a config name to a file, so every choice is one line of YAML:
 
 | Knob | Values |
 |---|---|
@@ -37,7 +37,7 @@ Each folder's `__init__.py` maps a config name to a file, so every choice is one
 ## Quick start
 
 ```bash
-git clone https://github.com/patrickamadeus/picorsi.git && cd picorsi
+git clone https://github.com/patrickamadeus/picoRSI.git && cd picoRSI
 uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 
@@ -45,8 +45,6 @@ pytest -q                               # CPU, ~1 min
 python train.py --config tiny           # close a loop on CPU with a tiny random model (~1 min)
 python generate.py --config tiny        # watch one episode
 ```
-
-Or open `quickstart.ipynb` in Colab.
 
 ## Train
 
@@ -66,12 +64,12 @@ python evaluate.py --run runs/count_grpo                        # held-out tasks
 pip install -e ".[eval]"
 python evaluate.py --benchmarks mmstar                          # base model, through lmms-eval
 python evaluate.py --run runs/count_grpo --benchmarks mmstar    # the trained run, LoRA included
-python -m harness.plot runs/count_grpo --out curve.png          # success vs cost
+python -m utils.plot runs/count_grpo --out curve.png          # success vs cost
 ```
 
 Held-out success is ours because the tasks are ours. Benchmarks go through
 [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) so the numbers are standard and
-comparable. `harness/lmms.py` is the bridge: lmms-eval owns the tasks, prompts and scoring, our
+comparable. `utils/lmms.py` is the bridge: lmms-eval owns the tasks, prompts and scoring, our
 policy answers (greedy, the model's standard image pipeline), trained LoRA included.
 
 ## Result
@@ -91,7 +89,7 @@ GRPO teaches SmolVLM-256M to count objects in images it has never seen
 55 of the 100 proposed updates passed the gate. Part of the early gain is format (every answer
 parses by the end), but the counting itself went from chance to 48%. All nine count goals appear
 in training, so this is generalization to new images, not to new goals. One seed, one task family;
-an earlier run of the same config reached 51.5%. The full trace is in `results/`.
+an earlier run of the same config reached 51.5%. The full trace is `assets/headline_trace.jsonl.gz`.
 
 ## What makes a result here trustworthy
 
@@ -115,8 +113,16 @@ an earlier run of the same config reached 51.5%. The full trace is in `results/`
 ## Contributing
 
 No `trl`, `peft`, `accelerate` or RL libraries in the loop. A new env, judge or update mode is one
-file in its folder plus one line in that folder's `__init__.py`, with tests. See
-[`docs/architecture.md`](docs/architecture.md).
+file plus one line in `envs/__init__.py` or `rsi/__init__.py`, with tests.
+
+- **Env:** subclass `envs.base.Env` + `SeededTasks`; `make_task(seed)` must be a pure function of the
+  seed; implement `reset(task) -> Obs`, `step(action) -> (Obs, reward, done, info)` and `actions`.
+- **Update mode:** a class with `propose(batch) -> Update | None`, `commit`, `revert` and `persisted`.
+  `commit` writes to disk, `revert` undoes exactly, and `persisted` is `False` for a commit that
+  changed nothing — the gate relies on all three.
+- **Judge:** a class with `score(traj) -> ScoredTrajectory`.
+- **Reading a run:** `utils.log.Trace("runs/x").records("eval")` — every rollout, update and eval,
+  with cumulative cost and the full config on the first record.
 
 ## Citation
 
@@ -125,7 +131,7 @@ file in its folder plus one line in that folder's `__init__.py`, with tests. See
   author       = {Patrick Amadeus Irawan},
   title        = {picoRSI: a small, readable stack for multimodal self-improvement loops},
   year         = {2026},
-  howpublished = {\url{https://github.com/patrickamadeus/picorsi}}
+  howpublished = {\url{https://github.com/patrickamadeus/picoRSI}}
 }
 ```
 

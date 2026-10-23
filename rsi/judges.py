@@ -1,18 +1,52 @@
-"""A VLM as judge, for goals with no programmatic checker.
+"""Judges turn a trajectory into a reward. Each has one method: score(traj) -> ScoredTrajectory.
 
-  VLMJudge        a separate, frozen VLM asked "did the agent achieve the goal?"; P(yes) from logprobs
+  OutcomeJudge    the environment's ground truth: it already knows whether the goal was reached
+  VLMJudge        a separate, frozen VLM asked "did the agent achieve the goal?" — for goals with no checker
   CompositeJudge  ground truth where the env has it, the VLM elsewhere. On ground-truth tasks it also runs
                   the VLM at judge_sample_rate *without* letting it change the reward, so the log collects
                   judge-vs-truth disagreements: the data a judge-improvement mode would learn from.
 
-The judge is a different model from the policy on purpose: one sharing the policy's weights shares its blind spots.
+The reward says where it came from (verdict_source), which the gate checks: an update learned from a
+signal you won't have at deployment is refused. The VLM judge is a different model from the policy on
+purpose: one sharing the policy's weights shares its blind spots.
 """
-from dataclasses import replace
+from collections import Counter
+from dataclasses import dataclass, replace
 
 import numpy as np
 
-from harness.rollout import Trajectory
-from judges.outcome import OutcomeJudge, ScoredTrajectory, hack_flags
+from utils.rollout import Trajectory
+
+
+@dataclass(frozen=True)
+class ScoredTrajectory:
+    traj: Trajectory
+    reward: float
+    per_step_credit: list[float] | None
+    verdict_source: str        # "outcome" | "judge" — where the signal came from
+    confidence: float
+    flags: tuple[str, ...]     # reward-hacking and degeneracy tripwires
+    judge_verdict: float | None = None    # sampled VLM opinion on a ground-truth task (agreement logging)
+    judge_tokens: int = 0
+
+
+def hack_flags(traj: Trajectory) -> tuple[str, ...]:
+    flags = []
+    if traj.total_reward > 0 and traj.env_steps == 0:
+        flags.append("zero_step_success")            # almost always an env bug, never a skill
+    actions = [s["action"] for s in traj.steps if s.get("action") is not None]
+    if len(actions) >= 8 and Counter(actions).most_common(1)[0][1] >= 0.8 * len(actions):
+        flags.append("action_loop")
+    if traj.parse_fails / max(traj.env_steps, 1) > 0.5:
+        flags.append("noop_spam")
+    return tuple(flags)
+
+
+class OutcomeJudge:
+    """Never re-derives success, only reads it from the env."""
+
+    def score(self, traj: Trajectory) -> ScoredTrajectory:
+        return ScoredTrajectory(traj, traj.total_reward, None, "outcome", 1.0, hack_flags(traj))
 
 
 class YesNo:

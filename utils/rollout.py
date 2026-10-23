@@ -7,7 +7,7 @@ import torch
 
 from configs.config import LoopConfig
 from envs.base import Env, Task
-from harness.prompt import load_scaffold, parse_action, render
+from utils.prompt import load_scaffold, parse_action, render
 
 SYSTEM = "You are an agent acting in a visual environment. Look at the image and reach the goal."
 PARSE_FAIL_SHAPING = -0.01     # recorded per step, kept out of total_reward so judges see raw env signal

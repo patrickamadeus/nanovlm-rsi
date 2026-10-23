@@ -1,6 +1,6 @@
 import pytest
 
-from harness.log import Cost, Trace
+from utils.log import Cost, Trace
 
 
 def test_records_roundtrip_by_kind(tmp_path):

@@ -3,9 +3,8 @@ import pytest
 
 from configs.config import LoopConfig, PolicyConfig
 from envs.base import Task
-from harness.rollout import Trajectory
-from judges.outcome import OutcomeJudge
-from judges.vlm import CompositeJudge, VLMJudge
+from utils.rollout import Trajectory
+from rsi.judges import CompositeJudge, OutcomeJudge, VLMJudge
 
 IMG = np.zeros((64, 64, 3), np.uint8)
 NATIVE = Task("count_objects", 2, ("3",), 1, "train")
@@ -69,7 +68,7 @@ def test_sample_rate_controls_how_often_the_judge_runs():
 
 
 def test_real_tiny_judge_returns_a_probability():
-    from judges.vlm import YesNo
+    from rsi.judges import YesNo
     j = YesNo(PolicyConfig(tiny=True, device="cpu", dtype="float32"))
     p, tokens = j.p_yes_given("Did the agent succeed?", [IMG])
     assert 0.0 <= p <= 1.0 and tokens > 0
