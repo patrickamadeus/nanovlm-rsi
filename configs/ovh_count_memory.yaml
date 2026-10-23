@@ -1,0 +1,18 @@
+# Prompt-level self-improvement through OpenVLHarness: Qwen3-VL-2B with zoom + coding tools answers
+# count_objects; successful episodes become skills recalled into later questions.
+# Needs the model server and tool router running: docs/openvlharness.md
+harness: openvlharness
+ovh_config: configs/openvlharness/qwen3_2b_zoom_code.yaml
+env: static
+static_families: [count_objects]
+judge: outcome
+update: memory
+curriculum: frontier
+iters: 6
+tasks_per_iter: 4
+group_size: 2
+eval_every: 3
+eval_n: 40
+heldout_n: 40
+gate_n: 16
+run_dir: runs/ovh_count_memory

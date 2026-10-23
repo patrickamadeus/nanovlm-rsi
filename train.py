@@ -29,7 +29,10 @@ from rsi.gate import gate
 
 def train(cfg: LoopConfig, policy=None) -> EvalResult:
     check_run_dir(cfg)
-    policy     = policy or make_policy(cfg.policy)
+    if cfg.harness == "openvlharness":
+        from harness.openvlharness import check_config
+        check_config(cfg)
+    policy     = policy or make_policy(cfg.policy)        # with openvlharness: memory embeddings only
     env        = make_env(cfg)
     judge      = make_judge(cfg, env)
     updater    = make_update(cfg, policy)                     # grpo | memory

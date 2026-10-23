@@ -1,6 +1,6 @@
 """The harness: one episode. Render the scaffold, let the policy act, step the env until done or out of budget."""
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
@@ -42,6 +42,12 @@ def _replay(prompt, rgb, gen) -> dict:
 
 
 def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str = "") -> Trajectory:
+    if cfg.harness == "openvlharness":           # the served model acts; `policy` is only used for embeddings
+        from harness.openvlharness import get_agent, ovh_rollout
+        t0 = time.perf_counter()
+        traj = ovh_rollout(get_agent(cfg.ovh_config), env, task, cfg, memory_text=memory_text)
+        secs = time.perf_counter() - t0          # the served model's time, as seen from here
+        return replace(traj, wall_ms=secs * 1000, model_seconds=secs)
     t_start = time.perf_counter()
     template = load_scaffold(cfg.policy.scaffold_path)
     obs = env.reset(task)

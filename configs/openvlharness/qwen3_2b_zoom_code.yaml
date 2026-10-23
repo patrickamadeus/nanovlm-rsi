@@ -1,0 +1,55 @@
+# OpenVLHarness agent: Qwen3-VL-2B served by vLLM, with only the tools that need no GPU worker or API key.
+# Adapted from OpenVLHarness configs/agent/qwen3_8b_paper.yaml.
+agent_name: MainAgent
+agent_config_version: picorsi_qwen3_2b_v1
+agent:
+  model_service: orchestrator
+  max_iterations: 8
+  max_context_length: 32768
+  tool_choice: auto
+  paired_sampling_seed: false
+memory:
+  emit_policy: always
+  modules:
+  - name: image
+  - name: tool_context
+capabilities:
+  registries:
+  - paper
+  tools:
+    zoom:
+      backend: zoom_in_image_by_bbox
+    coding:
+      generator: python_coding_agent
+      executor: python_executor_local
+services:
+  client:
+    base_url: ${TOOL_SERVER_URL}
+    timeout_seconds: 120
+    retry: 2
+  server:
+    host: 127.0.0.1
+    port: 8101
+    registration: configured_only
+  tools:
+    zoom_in_image_by_bbox: {}
+    python_coding_agent:
+      model_service: orchestrator
+      context: fresh
+    python_executor_local:
+      transport: local
+      timeout_seconds: 30
+  models:
+    orchestrator:
+      alias: qwen3-vl-2b-instruct
+      base: ${MODEL_BASE_URL}
+      key: ${MODEL_API_KEY}
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      repetition_penalty: 1.0
+      presence_penalty: 1.5
+      return_token_ids: false
+      timeout: 120
+      retry: 2
