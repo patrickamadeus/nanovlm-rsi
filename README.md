@@ -91,6 +91,29 @@ parses by the end), but the counting itself went from chance to 48%. All nine co
 in training, so this is generalization to new images, not to new goals. One seed, one task family;
 an earlier run of the same config reached 51.5%. The full trace is `assets/headline_trace.jsonl.gz`.
 
+### Real VQA: The Cauldron (mostly a format gain, so far)
+
+The same loop on the checkable turns of The Cauldron's 1% sample (`--config cauldron_grpo`, 66 min):
+
+| | before | after 100 iterations |
+|---|---:|---:|
+| held-out success (200 frozen tasks) | 22.0% | 49.0% |
+| parse-failure rate | 52.5% | 16.5% |
+| **MMStar** (all 1,500) | 26.8% ± 1.2 | 27.5% ± 1.2 |
+
+Read this one carefully. Split by answer type on the same 200 tasks (sampled answers):
+
+| answer type | n | correct, before → after | correct when parsed |
+|---|---:|---:|---:|
+| yes/no | 101 | 23 → 65 | 55% → 68% |
+| number 0–20 | 83 | 24 → 28 | 51% → 50% |
+| multiple choice | 16 | 6 → 9 | — |
+
+Most of the gain is the model learning the answer format. On yes/no it stays below always saying
+"yes" (71% of held-out yes/no answers); on numbers it got no better once parsed. 59 of 100 updates
+passed the gate. SmolVLM was very likely trained on The Cauldron, so these rows may not be new to it.
+Next: majority-answer baselines in every eval, balanced yes/no, and per-type success in the log.
+
 ## What makes a result here trustworthy
 
 - **Three splits by seed hash**: train 70%, gate 10%, held-out 20%. The curriculum only sees train
