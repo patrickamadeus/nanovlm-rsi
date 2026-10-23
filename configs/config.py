@@ -30,7 +30,7 @@ class LoopConfig:
     update: str = "grpo"           # rsi/:     "grpo" | "memory"  — exactly one per run
     curriculum: str = "uniform"    # rsi/:     "uniform" | "frontier"
     harness: str = "pico"          # harness/: "pico" (rollout.py) | "openvlharness" (tools, served model)
-    ovh_config: str = "configs/openvlharness/qwen3_2b_zoom_code.yaml"
+    ovh_config: str = "configs/openvlharness/qwen3_2b_zoom.yaml"
 
     iters: int = 20
     tasks_per_iter: int = 4

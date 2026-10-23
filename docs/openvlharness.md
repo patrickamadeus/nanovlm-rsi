@@ -21,16 +21,17 @@ python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen3-VL-2B-Instruct \
   --max-model-len 32768 --gpu-memory-utilization 0.40 --enable-auto-tool-choice --tool-call-parser hermes \
   --enforce-eager --limit-mm-per-prompt '{"video":0}'
 
-# 2. start the tool router (zoom + coding: no GPU workers, no API keys)
+# 2. start the tool router (zoom only: no GPU workers, no API keys, no code execution)
 export MODEL_BASE_URL=http://127.0.0.1:8222/v1 MODEL_API_KEY=empty TOOL_SERVER_URL=http://127.0.0.1:8101
-python -m openvlharness.services.server --config configs/openvlharness/qwen3_2b_zoom_code.yaml
+python -m openvlharness.services.server --config configs/openvlharness/qwen3_2b_zoom.yaml
 
 # 3. run the loop (same env vars)
 python train.py --config ovh_count_memory
 ```
 
-The coding tool runs model-written Python on your machine without a sandbox
-(OpenVLHarness's own warning). Run it somewhere you're comfortable with that.
+`configs/openvlharness/qwen3_2b_zoom_code.yaml` adds the coding tool. It runs model-written Python
+on your machine without a sandbox (OpenVLHarness's own warning), so it is opt-in: use it only inside
+a container or VM you're comfortable with, and point both the router and `ovh_config` at it.
 
 ## First numbers (20 held-out count tasks, no learning)
 
