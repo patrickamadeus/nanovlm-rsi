@@ -3,7 +3,7 @@
   held-out   our own frozen env tasks — the in-domain claim. Two axes, reported separately:
              unseen_seed_rate (goal seen in training, new image) and unseen_goal_rate (goal never trained on)
   benchmarks standard VLM benchmarks through lmms-eval (MMStar by default) — the forgetting check.
-             The trained LoRA is merged into the base weights and saved as a plain HF checkpoint first.
+             lmms-eval runs our policy directly (harness/lmms.py), trained LoRA included.
 
     python evaluate.py --run runs/count_grpo                          # held-out, the run's final weights
     python evaluate.py --run runs/count_grpo --benchmarks mmstar      # needs: pip install -e ".[eval]"
@@ -11,13 +11,11 @@
 """
 import argparse
 import os
-import subprocess
-import sys
 from dataclasses import dataclass
 
 import numpy as np
 
-from configs.config import LoopConfig, PolicyConfig, load_config
+from configs.config import LoopConfig, load_config
 from envs.base import Env, Task
 from harness.log import Cost, Trace
 from harness.rollout import recall, rollout, rollout_record
@@ -78,12 +76,14 @@ def make_eval_fn(policy, env: Env, log: Trace, cfg: LoopConfig, store=None):
     return eval_fn
 
 
-def load_run(run_dir: str):
+def load_run(run_dir: str, **policy_overrides):
     """Rebuild a finished run's config and policy, with its committed LoRA weights if it trained any."""
+    from dataclasses import replace
+
     from models import make_policy
     run = Trace(run_dir).records("run")[0]
     cfg = load_config(None, **{k: v for k, v in run["config"].items() if k != "policy"}, policy=run["config"]["policy"])
-    policy = make_policy(cfg.policy)
+    policy = make_policy(replace(cfg.policy, **policy_overrides))
     weights = os.path.join(run_dir, "weights.safetensors")
     if os.path.exists(weights):
         from safetensors.torch import load_file
@@ -92,26 +92,8 @@ def load_run(run_dir: str):
     return cfg, policy
 
 
-def export_checkpoint(policy, out_dir: str) -> str:
-    """Merge LoRA into a copy of the model and save it as a plain HF checkpoint. The processor saved is the
-    model's original one, not our single-tile env setting, so benchmarks see the standard image pipeline —
-    exactly what the untrained base model is scored with."""
-    import copy
-
-    from transformers import AutoProcessor
-
-    from models.lora import merge_lora
-    model = merge_lora(copy.deepcopy(policy.model))
-    model.save_pretrained(out_dir)
-    AutoProcessor.from_pretrained(policy.cfg.model_id).save_pretrained(out_dir)
-    return out_dir
-
-
-def lmms_eval_command(checkpoint: str, tasks: str, out_dir: str, model: str = "huggingface", batch_size: int = 1,
-                      limit: int | None = None) -> list[str]:
-    cmd = [sys.executable, "-m", "lmms_eval", "--model", model, "--model_args", f"pretrained={checkpoint}",
-           "--tasks", tasks, "--batch_size", str(batch_size), "--output_path", out_dir]
-    return cmd + (["--limit", str(limit)] if limit else [])   # --limit is for debugging; reported numbers use all items
+# benchmarks see the model's standard image pipeline and free-form answers, not our env settings
+BENCHMARK_POLICY = dict(image_side=0, response_prefix="", stop_at_newline=False)
 
 
 def main():
@@ -120,22 +102,26 @@ def main():
     ap.add_argument("--split", default="heldout", choices=["heldout", "gate"])
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--benchmarks", help="comma-separated lmms-eval tasks, e.g. mmstar")
-    ap.add_argument("--lmms_model", default="huggingface", help="lmms-eval model class that loads the checkpoint")
     ap.add_argument("--limit", type=int, help="lmms-eval items per task (debug only)")
     args = ap.parse_args()
 
+    overrides = BENCHMARK_POLICY if args.benchmarks else {}
     if args.run:
-        cfg, policy = load_run(args.run)
+        cfg, policy = load_run(args.run, **overrides)
     else:
+        from dataclasses import replace
+
         from models import make_policy
         cfg = LoopConfig()
-        policy = make_policy(cfg.policy)
+        policy = make_policy(replace(cfg.policy, **overrides))
     out = os.path.join(args.run or "runs/base", "eval")
 
-    if args.benchmarks:            # a trained run is exported; the base model is scored straight from the Hub
-        ckpt = export_checkpoint(policy, os.path.join(out, "checkpoint")) if args.run else cfg.policy.model_id
-        subprocess.run(lmms_eval_command(ckpt, args.benchmarks, os.path.join(out, "lmms_eval"), args.lmms_model,
-                                         limit=args.limit), check=True)
+    if args.benchmarks:
+        from harness.lmms import run_benchmarks
+        scores = run_benchmarks(policy, args.benchmarks.split(","), args.limit)
+        Trace(out).log_eval(split="benchmarks", scores=scores, limit=args.limit, run=args.run)
+        for task, metrics in scores.items():
+            print(task, " ".join(f"{k}={v:.4f}" for k, v in metrics.items()))
         return
 
     from envs import make_env

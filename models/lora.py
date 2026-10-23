@@ -41,20 +41,6 @@ def apply_lora(model: nn.Module, r: int = 8, alpha: float = 16, targets: tuple[s
     return wrapped
 
 
-def merge_lora(model: nn.Module) -> nn.Module:
-    """Fold every adapter into its base weight, W + (alpha / r) B A, leaving plain nn.Linear layers.
-    The result is an ordinary HF model again: save_pretrained() and any evaluator can load it."""
-    for module in list(model.modules()):
-        for child_name, child in list(module.named_children()):
-            if isinstance(child, LoRALinear):
-                base = child.base
-                with torch.no_grad():
-                    delta = (child.B @ child.A) * child.scale if child.enabled else 0
-                    base.weight.copy_((base.weight.float() + delta).to(base.weight.dtype))
-                setattr(module, child_name, base)
-    return model
-
-
 @contextmanager
 def adapters_disabled(model: nn.Module):
     layers = [m for m in model.modules() if isinstance(m, LoRALinear)]

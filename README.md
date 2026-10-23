@@ -65,13 +65,14 @@ full config), `weights.safetensors` (committed LoRA) or `skills.jsonl` (committe
 python evaluate.py --run runs/count_grpo                        # held-out tasks, frozen, learning off
 pip install -e ".[eval]"
 python evaluate.py --benchmarks mmstar                          # base model, through lmms-eval
-python evaluate.py --run runs/count_grpo --benchmarks mmstar    # trained: LoRA merged, then lmms-eval
+python evaluate.py --run runs/count_grpo --benchmarks mmstar    # the trained run, LoRA included
 python -m harness.plot runs/count_grpo --out curve.png          # success vs cost
 ```
 
 Held-out success is ours because the tasks are ours. Benchmarks go through
 [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) so the numbers are standard and
-comparable: the trained LoRA is merged into the base weights and saved as a plain HF checkpoint.
+comparable. `harness/lmms.py` is the bridge: lmms-eval owns the tasks, prompts and scoring, our
+policy answers (greedy, the model's standard image pipeline), trained LoRA included.
 
 ## Result
 

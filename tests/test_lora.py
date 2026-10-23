@@ -57,18 +57,3 @@ def test_adapters_stay_float32_on_a_bfloat16_base():
     out = layer(torch.randn(3, 6, dtype=torch.bfloat16))
     assert out.dtype == torch.bfloat16
 
-
-def test_merge_lora_folds_adapters_into_plain_linear_layers():
-    import torch.nn as nn
-    from models.lora import merge_lora
-    torch.manual_seed(0)
-    model = nn.Sequential(nn.Linear(6, 6))
-    model.text_model = nn.Module()
-    model.text_model.q_proj = nn.Linear(6, 4)
-    apply_lora(model, r=2, alpha=4)
-    nn.init.normal_(model.text_model.q_proj.B)            # a trained adapter, not the zero init
-    x = torch.randn(3, 6)
-    want = model.text_model.q_proj(x)
-    merge_lora(model)
-    assert type(model.text_model.q_proj) is nn.Linear
-    assert torch.allclose(model.text_model.q_proj(x), want, atol=1e-5)
