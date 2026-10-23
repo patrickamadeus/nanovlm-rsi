@@ -17,15 +17,16 @@ no framework owning the control flow.
 train.py        the loop, top to bottom — read this first
 evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
 generate.py     watch the policy act on one task, step by step
-configs/        config.py (every knob) + one YAML per experiment
+configs/        config.py (every knob) + yaml/ (one file per experiment) + openvlharness/ (agent configs)
 models/         smolvlm.py (the policy: act / logprobs / embed), lora.py (from scratch)
 envs/           static.py (numpy count & gather tasks, CPU), craftax.py (open-world, optional)
-judges/         outcome.py (env ground truth), vlm.py (a separate VLM as judge, + composite)
-rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice), gate.py (what is kept)
-harness/        rollout.py (one episode), prompt.py + scaffolds/ (the prompt template), log.py, plot.py
+rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice),
+                judges.py (how it's scored), gate.py (what is kept)
+utils/          rollout.py (one episode), prompt.py + scaffold.txt (the prompt), log.py, plot.py, lmms.py,
+                openvlharness.py (rollouts through OpenVLHarness instead)
 ```
 
-Each folder's `__init__.py` maps a config name to a file, so every choice is one line of YAML:
+`envs/__init__.py` and `rsi/__init__.py` map a config name to a file, so every choice is one line of YAML:
 
 | Knob | Values |
 |---|---|
@@ -33,11 +34,12 @@ Each folder's `__init__.py` maps a config name to a file, so every choice is one
 | `judge` | `outcome` · `vlm` · `composite` |
 | `update` | `grpo` (LoRA weights) · `memory` (skill library) — exactly one per run |
 | `curriculum` | `uniform` · `frontier` (tasks at the edge of competence) |
+| `harness` | `pico` (our rollout) · `openvlharness` (served Qwen3-VL with tools; `update: memory` only) |
 
 ## Quick start
 
 ```bash
-git clone https://github.com/patrickamadeus/picorsi.git && cd picorsi
+git clone https://github.com/patrickamadeus/picoRSI.git && cd picoRSI
 uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e ".[dev]"
 
@@ -45,8 +47,6 @@ pytest -q                               # CPU, ~1 min
 python train.py --config tiny           # close a loop on CPU with a tiny random model (~1 min)
 python generate.py --config tiny        # watch one episode
 ```
-
-Or open `quickstart.ipynb` in Colab.
 
 ## Train
 
@@ -66,12 +66,12 @@ python evaluate.py --run runs/count_grpo                        # held-out tasks
 pip install -e ".[eval]"
 python evaluate.py --benchmarks mmstar                          # base model, through lmms-eval
 python evaluate.py --run runs/count_grpo --benchmarks mmstar    # the trained run, LoRA included
-python -m harness.plot runs/count_grpo --out curve.png          # success vs cost
+python -m utils.plot runs/count_grpo --out curve.png          # success vs cost
 ```
 
 Held-out success is ours because the tasks are ours. Benchmarks go through
 [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) so the numbers are standard and
-comparable. `harness/lmms.py` is the bridge: lmms-eval owns the tasks, prompts and scoring, our
+comparable. `utils/lmms.py` is the bridge: lmms-eval owns the tasks, prompts and scoring, our
 policy answers (greedy, the model's standard image pipeline), trained LoRA included.
 
 ## Result
@@ -91,7 +91,7 @@ GRPO teaches SmolVLM-256M to count objects in images it has never seen
 55 of the 100 proposed updates passed the gate. Part of the early gain is format (every answer
 parses by the end), but the counting itself went from chance to 48%. All nine count goals appear
 in training, so this is generalization to new images, not to new goals. One seed, one task family;
-an earlier run of the same config reached 51.5%. The full trace is in `results/`.
+an earlier run of the same config reached 51.5%. The full trace is `assets/headline_trace.jsonl.gz`.
 
 ## What makes a result here trustworthy
 
@@ -110,13 +110,84 @@ an earlier run of the same config reached 51.5%. The full trace is in `results/`
 | static env, Craftax adapter (plumbing tested, no result yet) | ✅ |
 | outcome / VLM / composite judges | ✅ |
 | scaffold self-edit, judge self-improvement | not yet |
-| OpenVLHarness (tools, served Qwen3-VL) | this branch: `harness: openvlharness`, see [`docs/openvlharness.md`](docs/openvlharness.md) |
+| OpenVLHarness (tools, served Qwen3-VL) | this branch: `harness: openvlharness`, see [below](#openvlharness-this-branch) |
+
+## OpenVLHarness (this branch)
+
+The `complex` branch can swap our rollout loop (`utils/rollout.py`) for
+[OpenVLHarness](https://github.com/uclanlp/OpenVLHarness): a served VLM with tools (zoom, Python,
+and optionally grounding, OCR, depth, search) and a multimodal memory. Everything else — envs,
+judges, the memory update, the curriculum, the gate and the log — is unchanged.
+
+**What works:** single-answer tasks (`count_objects`) with prompt-level updates (`update: memory`).
+**Not yet:** GRPO (a served 2B model's trajectories carry no token ids) and multi-step envs
+(the agent answers once; env actions would have to become tools).
+
+### Setup (one GPU, ~20 GB)
+
+```bash
+pip install -e ".[dev]"
+pip install vllm "openvlharness[qwen,server] @ git+https://github.com/uclanlp/OpenVLHarness.git"
+
+# 1. serve the model
+python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen3-VL-2B-Instruct \
+  --served-model-name Qwen/Qwen3-VL-2B-Instruct --host 127.0.0.1 --port 8222 --dtype bfloat16 \
+  --max-model-len 32768 --gpu-memory-utilization 0.40 --enable-auto-tool-choice --tool-call-parser hermes \
+  --enforce-eager --limit-mm-per-prompt '{"video":0}'
+
+# 2. start the tool router (zoom only: no GPU workers, no API keys, no code execution)
+export MODEL_BASE_URL=http://127.0.0.1:8222/v1 MODEL_API_KEY=empty TOOL_SERVER_URL=http://127.0.0.1:8101
+python -m openvlharness.services.server --config configs/openvlharness/qwen3_2b_zoom.yaml
+
+# 3. run the loop (same env vars)
+python train.py --config ovh_count_memory
+```
+
+`configs/openvlharness/qwen3_2b_zoom_code.yaml` adds the coding tool. It runs model-written Python
+on your machine without a sandbox (OpenVLHarness's own warning), so it is opt-in: use it only inside
+a container or VM you're comfortable with, and point both the router and `ovh_config` at it.
+
+### First numbers
+
+| | held-out success |
+|---|---:|
+| SmolVLM-256M, pico harness, before GRPO | 3.0% |
+| SmolVLM-256M, pico harness, after GRPO | 51.5% |
+| Qwen3-VL-2B, OpenVLHarness (zoom + coding), no learning, 20 tasks | 35% (7/20) |
+| Qwen3-VL-2B, OpenVLHarness (zoom only), no learning, 40 tasks | 52.5% |
+
+Every one of the 20 episodes used tools. 4 of 20 hit the 8-turn limit without answering, and the 2B
+model often calls tools that aren't configured (e.g. `Visual_Grounding_Tool`) — tool-use errors a
+scaffold or memory update could learn to avoid.
+
+### A memory loop through OpenVLHarness (`--config ovh_count_memory`)
+
+6 iterations, 4 tasks × 2 rollouts each, 40 held-out tasks, 43 minutes, 2.7M tokens:
+
+| eval at iteration | 0 | 3 | final |
+|---|---:|---:|---:|
+| held-out success | 52.5% | 65.0% | 40.0% |
+
+The gate rejected 5 of the 6 memory updates: putting recalled skills ("- How many blue squares…
+-> 3") into the question lowered gate-split success. So this run shows the plumbing and the gate
+working, **not** improvement: for a 2B model with tools, copying past answers into the prompt is not
+a useful skill format, and 40-task evals swing by ±15 points. Better next steps here are skills that
+describe *procedure* (e.g. "zoom into each quadrant, then add") rather than answers, larger evals,
+and scaffold edits targeting the tool-call errors above.
 
 ## Contributing
 
 No `trl`, `peft`, `accelerate` or RL libraries in the loop. A new env, judge or update mode is one
-file in its folder plus one line in that folder's `__init__.py`, with tests. See
-[`docs/architecture.md`](docs/architecture.md).
+file plus one line in `envs/__init__.py` or `rsi/__init__.py`, with tests.
+
+- **Env:** subclass `envs.base.Env` + `SeededTasks`; `make_task(seed)` must be a pure function of the
+  seed; implement `reset(task) -> Obs`, `step(action) -> (Obs, reward, done, info)` and `actions`.
+- **Update mode:** a class with `propose(batch) -> Update | None`, `commit`, `revert` and `persisted`.
+  `commit` writes to disk, `revert` undoes exactly, and `persisted` is `False` for a commit that
+  changed nothing — the gate relies on all three.
+- **Judge:** a class with `score(traj) -> ScoredTrajectory`.
+- **Reading a run:** `utils.log.Trace("runs/x").records("eval")` — every rollout, update and eval,
+  with cumulative cost and the full config on the first record.
 
 ## Citation
 
@@ -125,7 +196,7 @@ file in its folder plus one line in that folder's `__init__.py`, with tests. See
   author       = {Patrick Amadeus Irawan},
   title        = {picoRSI: a small, readable stack for multimodal self-improvement loops},
   year         = {2026},
-  howpublished = {\url{https://github.com/patrickamadeus/picorsi}}
+  howpublished = {\url{https://github.com/patrickamadeus/picoRSI}}
 }
 ```
 

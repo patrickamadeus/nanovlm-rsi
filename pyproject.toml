@@ -13,7 +13,7 @@ authors = [{ name = "Patrick Amadeus Irawan", email = "patrickai0309@gmail.com" 
 dependencies = ["torch", "numpy", "transformers>=4.50", "pillow", "safetensors", "pyyaml"]
 
 [project.urls]
-Homepage = "https://github.com/patrickamadeus/picorsi"
+Homepage = "https://github.com/patrickamadeus/picoRSI"
 
 [project.optional-dependencies]
 craftax = ["jax", "craftax"]
@@ -24,10 +24,11 @@ dev = ["pytest", "matplotlib"]
 
 [tool.setuptools]
 py-modules = ["train", "evaluate", "generate"]
-packages = ["configs", "models", "envs", "judges", "rsi", "harness"]
+packages = ["configs", "models", "envs", "rsi", "utils"]
 
 [tool.setuptools.package-data]
-"*" = ["*.txt", "*.yaml"]
+configs = ["yaml/*.yaml", "openvlharness/*.yaml"]
+utils = ["*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

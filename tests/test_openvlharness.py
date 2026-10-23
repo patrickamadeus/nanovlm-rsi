@@ -3,7 +3,7 @@ import pytest
 
 from configs.config import LoopConfig
 from envs.static import StaticEnv
-from harness.openvlharness import ovh_rollout
+from utils.openvlharness import ovh_rollout
 
 
 class FakeAgent:
@@ -53,7 +53,7 @@ def test_no_parseable_answer_is_a_parse_failure_not_an_env_call(tmp_path):
 
 
 def test_openvlharness_only_runs_single_answer_tasks_and_prompt_level_updates():
-    from harness.openvlharness import check_config
+    from utils.openvlharness import check_config
     check_config(LoopConfig(harness="openvlharness", update="memory", static_families=("count_objects",)))
     with pytest.raises(ValueError, match="token ids"):
         check_config(LoopConfig(harness="openvlharness", update="grpo", static_families=("count_objects",)))

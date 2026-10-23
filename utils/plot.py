@@ -3,12 +3,12 @@
 A memory update costs almost no GPU time and a GRPO update costs a lot, so iteration-indexed
 curves would make one carrier look slow and the other efficient purely through the x-axis.
 
-    python -m harness.plot runs/a runs/b --x gpu_seconds --out compare.png
+    python -m utils.plot runs/a runs/b --x gpu_seconds --out compare.png
 """
 import argparse
 import os
 
-from harness.log import Trace
+from utils.log import Trace
 
 AXES = {"gpu_seconds": "cumulative GPU seconds", "env_steps": "cumulative env steps",
         "policy_tokens": "cumulative policy tokens"}

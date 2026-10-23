@@ -2,8 +2,9 @@ import pytest
 
 from configs.config import LoopConfig
 from envs.base import Task
-from harness.rollout import Trajectory
-from judges import OutcomeJudge, make_judge
+from utils.rollout import Trajectory
+from rsi import make_judge
+from rsi.judges import OutcomeJudge
 
 TASK = Task("gather_order", 1, ("red", "green", "blue"), 24, "train")
 

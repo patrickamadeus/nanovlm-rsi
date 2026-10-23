@@ -6,14 +6,14 @@ So it fits tasks answered once (count_objects), and prompt-level updates (memory
 an HTTP endpoint, and a 2B model's trajectories carry no token ids, so GRPO is not available here yet.
 
     pip install "openvlharness @ git+https://github.com/uclanlp/OpenVLHarness.git"
-    serve the model (vLLM) and start the tool router: see docs/openvlharness.md
+    serve the model (vLLM) and start the tool router: see the README
 """
 import os
 import re
 
 from PIL import Image
 
-from harness.rollout import Trajectory
+from utils.rollout import Trajectory
 
 UPSCALE = 4                    # env frames are 64px; the model and its zoom tool want something to look at
 _agents: dict[str, object] = {}

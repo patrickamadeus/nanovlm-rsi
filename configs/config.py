@@ -1,4 +1,4 @@
-"""Every knob of a run. A YAML file in configs/ picks values; CLI flags override the YAML."""
+"""Every knob of a run. A YAML file in configs/yaml/ picks values; CLI flags override the YAML."""
 import hashlib
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
@@ -16,7 +16,7 @@ class PolicyConfig:
     temperature: float = 1.0       # GRPO needs real sampling diversity within a group
     dtype: str = "bfloat16"
     device: str = "auto"           # "auto" picks cuda when available
-    scaffold_path: str = "harness/scaffolds/v0.txt"
+    scaffold_path: str = "utils/scaffold.txt"
     image_side: int = 512          # one 512px tile; the processor default turns a 64px frame into 17 tiles
     stop_at_newline: bool = True   # the action is one line; generating past it is wasted compute
     response_prefix: str = "ACT:"  # prefilled assistant turn: 39/40 parseable vs 4/40 without, for a 256M model
@@ -29,7 +29,7 @@ class LoopConfig:
     judge: str = "outcome"         # judges/:  "outcome" | "vlm" | "composite"
     update: str = "grpo"           # rsi/:     "grpo" | "memory"  — exactly one per run
     curriculum: str = "uniform"    # rsi/:     "uniform" | "frontier"
-    harness: str = "pico"          # harness/: "pico" (rollout.py) | "openvlharness" (tools, served model)
+    harness: str = "pico"          # utils/:   "pico" (rollout.py) | "openvlharness" (openvlharness.py: tools, served model)
     ovh_config: str = "configs/openvlharness/qwen3_2b_zoom.yaml"
 
     iters: int = 20
@@ -96,7 +96,7 @@ def load_config(name: str | None = None, **overrides) -> LoopConfig:
     """configs/<name>.yaml (or a path), then overrides. Unknown keys are an error, not a silent no-op."""
     values = {}
     if name:
-        path = Path(name) if name.endswith((".yaml", ".yml")) else CONFIG_DIR / f"{name}.yaml"
+        path = Path(name) if name.endswith((".yaml", ".yml")) else CONFIG_DIR / "yaml" / f"{name}.yaml"
         values = yaml.safe_load(path.read_text()) or {}
     policy = {**values.pop("policy", {}), **overrides.pop("policy", {})}
     cfg = LoopConfig(**_coerce(LoopConfig, {**values, **overrides}))

@@ -1,6 +1,6 @@
 # Prompt-level self-improvement through OpenVLHarness: Qwen3-VL-2B with the zoom tool answers
 # count_objects; successful episodes become skills recalled into later questions.
-# Needs the model server and tool router running: docs/openvlharness.md
+# Needs the model server and tool router running: see the README
 harness: openvlharness
 ovh_config: configs/openvlharness/qwen3_2b_zoom.yaml
 env: static

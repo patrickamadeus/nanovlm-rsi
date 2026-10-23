@@ -6,7 +6,7 @@ import pytest
 from configs.config import LoopConfig
 from envs.base import split_for_seed
 from envs.static import StaticEnv
-from harness.log import Trace
+from utils.log import Trace
 from rsi.curriculum import frontier_weight, make_curriculum
 
 

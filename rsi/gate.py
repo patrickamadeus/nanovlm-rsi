@@ -17,7 +17,7 @@ import numpy as np
 
 from configs.config import LoopConfig
 from envs.base import Env, Task
-from harness.log import Cost
+from utils.log import Cost
 
 EvalFn = Callable[[list[Task]], tuple[float, float]]   # tasks -> (success_rate, parse_fail_rate)
 

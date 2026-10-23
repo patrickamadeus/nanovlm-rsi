@@ -9,8 +9,8 @@ from rsi.gate import gate
 from rsi.memory import SkillStore
 from tests.conftest import fake_embed
 from rsi.memory import Memory
-from harness.rollout import Trajectory
-from judges.outcome import ScoredTrajectory
+from utils.rollout import Trajectory
+from rsi.judges import ScoredTrajectory
 
 TASK = Task("count_objects", 2, ("3",), 1, "train")
 

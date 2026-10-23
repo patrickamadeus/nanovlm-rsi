@@ -3,7 +3,7 @@ from itertools import cycle
 
 from configs.config import LoopConfig, PolicyConfig
 from evaluate import EvalResult
-from harness.log import Trace
+from utils.log import Trace
 from train import train
 from tests.conftest import ScriptedPolicy
 

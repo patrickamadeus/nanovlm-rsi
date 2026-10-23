@@ -7,7 +7,7 @@ import torch
 
 from configs.config import LoopConfig
 from envs.base import Env, Task
-from harness.prompt import load_scaffold, parse_action, render
+from utils.prompt import load_scaffold, parse_action, render
 
 SYSTEM = "You are an agent acting in a visual environment. Look at the image and reach the goal."
 PARSE_FAIL_SHAPING = -0.01     # recorded per step, kept out of total_reward so judges see raw env signal
@@ -43,7 +43,7 @@ def _replay(prompt, rgb, gen) -> dict:
 
 def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str = "") -> Trajectory:
     if cfg.harness == "openvlharness":           # the served model acts; `policy` is only used for embeddings
-        from harness.openvlharness import get_agent, ovh_rollout
+        from utils.openvlharness import get_agent, ovh_rollout
         t0 = time.perf_counter()
         traj = ovh_rollout(get_agent(cfg.ovh_config), env, task, cfg, memory_text=memory_text)
         secs = time.perf_counter() - t0          # the served model's time, as seen from here

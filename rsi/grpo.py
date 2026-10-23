@@ -21,7 +21,7 @@ import numpy as np
 import torch
 from safetensors.torch import load_file, save_file
 
-from harness.log import Cost
+from utils.log import Cost
 from rsi.gate import Update
 
 
