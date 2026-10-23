@@ -4,17 +4,18 @@ import json
 import numpy as np
 import pytest
 
-from config import LoopConfig, PolicyConfig
+from configs.config import LoopConfig, PolicyConfig
 from envs.base import Task
 from envs.static import StaticEnv
-from infra.gate import gate
-from infra.memory import Skill, SkillStore
-from infra.trace import Trace
-from rollout import rollout, rollout_record
-from rsi import rsi
+from rsi.gate import gate
+from rsi.memory import Skill, SkillStore
+from harness.log import Trace
+from harness.rollout import rollout, rollout_record
+from train import train
 from tests.conftest import ScriptedPolicy, fake_embed
-from update.memory import MemoryUpdater
-from verify import ScoredTrajectory, Trajectory
+from rsi.memory import Memory
+from harness.rollout import Trajectory
+from judges.outcome import ScoredTrajectory
 
 OBS = "How many blue squares are there? Answer with the number."
 
@@ -28,7 +29,7 @@ def _scored(answer, seed):
 # C1 — same situation, different actions, equal reward: both must be stored
 def test_distinct_answers_for_the_same_situation_are_both_kept(tmp_path):
     store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
-    up = MemoryUpdater(store, LoopConfig())
+    up = Memory(store, LoopConfig())
     up.commit(up.propose([_scored("3", 2)]))
     up.commit(up.propose([_scored("5", 4)]))
     assert len(store) == 2
@@ -38,7 +39,7 @@ def test_distinct_answers_for_the_same_situation_are_both_kept(tmp_path):
 def test_noop_update_fails_the_gate(tmp_path):
     store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
     cfg = LoopConfig(gate_n=2, run_dir=str(tmp_path))
-    up = MemoryUpdater(store, cfg)
+    up = Memory(store, cfg)
     up.commit(up.propose([_scored("3", 2)]))
     dup = up.propose([_scored("3", 6)])                  # exact duplicate of what is stored
     r = gate(dup, up, StaticEnv(), cfg, eval_fn=lambda tasks: (0.5, 0.0))
@@ -58,12 +59,13 @@ def test_skill_ids_are_not_reused_after_revert(tmp_path):
 
 # I2 — reusing a run_dir is refused unless resuming; records carry a run_id
 def test_reusing_a_run_dir_requires_resume(tmp_path):
-    cfg = LoopConfig(iters=1, tasks_per_iter=1, group_size=1, eval_n=2, gate_n=2, heldout_n=8, run_dir=str(tmp_path))
-    rsi(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
+    cfg = LoopConfig(iters=1, tasks_per_iter=1, group_size=1, eval_n=2, gate_n=2, heldout_n=8, run_dir=str(tmp_path),
+                     update="memory")
+    train(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
     with pytest.raises(FileExistsError):
-        rsi(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
+        train(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
     cfg.resume = True
-    rsi(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
+    train(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
     recs = Trace(str(tmp_path)).records()
     assert all("run_id" in r for r in recs)
     assert len({r["run_id"] for r in recs}) == 2
@@ -71,7 +73,7 @@ def test_reusing_a_run_dir_requires_resume(tmp_path):
 
 # I3 — act() logprobs equal a re-score in the configured (bf16) dtype
 def test_act_logprobs_match_rescore_in_bfloat16():
-    from policy.vlm import Policy
+    from models.smolvlm import Policy
     p = Policy(PolicyConfig(tiny=True, device="cpu", dtype="bfloat16", max_new_tokens=8))
     img = [np.zeros((64, 64, 3), np.uint8)]
     step = p.act("hello", img)
@@ -121,12 +123,12 @@ def test_recall_runs_once_per_task_not_per_group_member(tmp_path):
             return fake_embed(text)
 
     cfg = LoopConfig(iters=1, tasks_per_iter=2, group_size=4, eval_n=2, gate_n=2, heldout_n=8,
-                     eval_every=100, run_dir=str(tmp_path))
+                     eval_every=100, run_dir=str(tmp_path), update="memory")
     store_path = tmp_path / "skills.jsonl"
     SkillStore(str(store_path), embed_fn=fake_embed).append(Skill("", "f", "seed skill", ("pick",), 1.0,
                                                                   fake_embed("seed skill")))
     cfg.resume = True
     policy = CountingPolicy(iter(lambda: "ACT: pick", None))
-    rsi(cfg, policy=policy)
+    train(cfg, policy=policy)
     train_recalls = len(calls)
     assert train_recalls <= 2 + 2 + 2 * 2      # train tasks + final eval + gate before/after — never x group_size

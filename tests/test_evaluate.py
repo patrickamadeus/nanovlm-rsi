@@ -3,11 +3,11 @@ import math
 import numpy as np
 import pytest
 
-from config import LoopConfig
+from configs.config import LoopConfig
 from envs.static import StaticEnv
 from evaluate import evaluate, make_eval_fn
-from infra.memory import Skill, SkillStore
-from infra.trace import Trace
+from rsi.memory import Skill, SkillStore
+from harness.log import Trace
 from tests.conftest import ScriptedPolicy, fake_embed
 
 env = StaticEnv()

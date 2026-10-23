@@ -1,22 +1,82 @@
-# nanoVLM-RSI
+# picoRSI
 
-The simplest repository for **multimodal recursive self-improvement** research, in plain PyTorch + numpy.
+A small, readable stack for **multimodal self-improvement loops**, in plain PyTorch.
 
-nanoVLM showed that the essential parts of a vision-language model fit in a handful of readable
-files. nanoVLM-RSI does the same for the *self-improvement loop*. A small VLM acts in a verifiable
-environment. A verifier scores what it did. An update rule (GRPO on LoRA, or a skill library)
-turns that into a durable change. A gate keeps the change only if it helps on data the loop never
-trains on. A trace records enough to attribute the result.
+A small VLM acts in a verifiable environment, a judge scores what it did, an update rule turns that
+into a durable change, and a gate keeps the change only if it helps on tasks the loop never trains
+on. GRPO, LoRA, the curriculum, the skill memory and the gate are written from scratch so you can
+read them; `transformers` only loads weights and runs the forward pass.
 
-Every method is written from scratch, so you can read how it works: GRPO, LoRA, advantage
-estimation, the competence-frontier curriculum, the skill store, the gate. `transformers` loads
-weights and runs the forward pass, and nothing else. This is not a SOTA system. It's a playground
-where a loop closes on CPU in under a minute, and a new experiment is one config flag plus one file.
+In the spirit of [nanoVLM](https://github.com/huggingface/nanoVLM) and
+[picoVLM](https://github.com/patrickamadeus/picovlm): one folder per part, one file per variant,
+no framework owning the control flow.
+
+## Layout
+
+```
+train.py        the loop, top to bottom — read this first
+evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
+generate.py     watch the policy act on one task, step by step
+configs/        config.py (every knob) + one YAML per experiment
+models/         smolvlm.py (the policy: act / logprobs / embed), lora.py (from scratch)
+envs/           static.py (numpy count & gather tasks, CPU), craftax.py (open-world, optional)
+judges/         outcome.py (env ground truth), vlm.py (a separate VLM as judge, + composite)
+rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice), gate.py (what is kept)
+harness/        rollout.py (one episode), prompt.py + scaffolds/ (the prompt template), log.py, plot.py
+```
+
+Each folder's `__init__.py` maps a config name to a file, so every choice is one line of YAML:
+
+| Knob | Values |
+|---|---|
+| `env` | `static` · `craftax` |
+| `judge` | `outcome` · `vlm` · `composite` |
+| `update` | `grpo` (LoRA weights) · `memory` (skill library) — exactly one per run |
+| `curriculum` | `uniform` · `frontier` (tasks at the edge of competence) |
+
+## Quick start
+
+```bash
+git clone https://github.com/patrickamadeus/picorsi.git && cd picorsi
+uv venv --python 3.12 && source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+pytest -q                               # CPU, ~1 min
+python train.py --config tiny           # close a loop on CPU with a tiny random model (~1 min)
+python generate.py --config tiny        # watch one episode
+```
+
+Or open `quickstart.ipynb` in Colab.
+
+## Train
+
+```bash
+python train.py --config count_grpo                     # GRPO on LoRA, SmolVLM-256M, one GPU
+python train.py --config count_memory                   # same task, skill-memory updates instead
+python train.py --config count_grpo --iters 10 --run_dir runs/short    # any field can be overridden
+```
+
+Outputs in `run_dir`: `trace.jsonl` (every rollout, update and eval, with cumulative cost and the
+full config), `weights.safetensors` (committed LoRA) or `skills.jsonl` (committed skills).
+
+## Evaluate
+
+```bash
+python evaluate.py --run runs/count_grpo                        # held-out tasks, frozen, learning off
+pip install -e ".[eval]"
+python evaluate.py --benchmarks mmstar                          # base model, through lmms-eval
+python evaluate.py --run runs/count_grpo --benchmarks mmstar    # trained: LoRA merged, then lmms-eval
+python -m harness.plot runs/count_grpo --out curve.png          # success vs cost
+```
+
+Held-out success is ours because the tasks are ours. Benchmarks go through
+[lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) so the numbers are standard and
+comparable: the trained LoRA is merged into the base weights and saved as a plain HF checkpoint.
 
 ## Result
 
-GRPO, written from scratch, teaches SmolVLM-256M to count objects in images it has never seen.
-The run took 77 minutes on one A40.
+GRPO teaches SmolVLM-256M to count objects in images it has never seen
+(`configs/count_grpo.yaml`, 77 min on one A40):
 
 ![held-out success vs GPU seconds](assets/headline.png)
 
@@ -25,153 +85,44 @@ The run took 77 minutes on one A40.
 | **held-out success** (200 frozen tasks, new images) | **3.0%** | **51.5%** |
 | parse-failure rate | 38.0% | 0.5% |
 | success when the answer parsed | 4.8% | 51.8% |
-| **MMStar** (all 1,500; forgetting tripwire) | 25.9% | 28.5% |
 
-Setup: LoRA r=8, self-curriculum, `count_objects` only, 8 tasks × 8 rollouts per iteration. 59 of
-the 100 proposed updates passed the gate; the other 41 were reverted. Total cost: 13,772 env steps,
-2.6M policy tokens, 2,936 GPU-seconds of model time. The full trace is in
-`results/headline_trace.jsonl.gz`.
-
-Read it honestly:
-- **Part of the early gain is format.** The parse-failure rate fell from 38% to 0.5%. Success
-  *among parsed answers* rose from 4.8% to 51.8%, so the counting itself improved too. (Chance on
-  1–9 is about 11%.)
-- **No forgetting detected.** MMStar moved +2.5 points, which is within the noise of a 1,500-item
-  benchmark. It's measured with one 512px tile and a plain prompt, so it sits below SmolVLM's
-  published number; baseline and final use identical settings.
-- **One seed, one task family, no ablations yet.** All nine count goals are seen in training, so
-  this is the unseen-*image* axis, not unseen-goal generalization.
-
-Reproduce:
-
-```bash
-python rsi.py --update_rule weights --proposer self --static_families count_objects \
-    --iters 100 --tasks_per_iter 8 --group_size 8 --eval_every 10 --eval_n 200 --gate_n 32 \
-    --bench true --run_dir runs/headline
-```
-
-## The loop
-
-```
-propose tasks ─► roll out a group per task ─► verify ─► carrier proposes an update
-              ─► gate commits or reverts it ─► trace everything ─► evaluate on held-out
-```
-
-`rsi.py` *is* this loop. `walkthrough.py` is the whole method in one file, in the order the loop
-runs, generated from the real source.
-
-## What's in the box
-
-| File | Lines | What it is |
-|---|---:|---|
-| `rsi.py` | 138 | the loop and its CLI: every config field is a flag |
-| `rollout.py` | 74 | one episode: render the prompt, act, step, until done or out of budget |
-| `policy/vlm.py` | 169 | any HF VLM behind `act()` / `logprobs()` / `embed()`; chat template, prefilled `ACT:` |
-| `policy/lora.py` | 53 | LoRA from scratch; switching adapters off recovers π_init exactly |
-| `update/weights.py` | 116 | GRPO from scratch: group advantages, clipped token-level loss, k3 KL |
-| `update/memory.py` | 45 | skill-library carrier: successful episodes become retrievable skills |
-| `infra/memory.py` | 134 | skill store: an append-only event log with byte-exact revert |
-| `infra/gate.py` | 50 | the acceptance bar: five conditions, gate split only |
-| `infra/trace.py` | 108 | JSONL trace: every rollout, update and eval, with cumulative cost |
-| `verify.py` | 134 | ground truth, VLM-as-judge, and routing with judge-vs-truth agreement logging |
-| `propose.py` | 64 | fixed sampling, or a curriculum at the competence frontier |
-| `envs/static.py` | 102 | from-scratch numpy env: count objects, gather in order. CPU, seconds |
-| `envs/craftax.py` | 73 | Craftax-Classic adapter, the only file that imports JAX (optional) |
-| `evaluate.py` | 103 | held-out eval with learning off: unseen-seed and unseen-goal axes, separately |
-| `evals/benchmarks.py` | 58 | MMStar (all 1,500) as a catastrophic-forgetting tripwire |
-
-## Quickstart
-
-```bash
-git clone https://github.com/patrickamadeus/nanovlm-rsi && cd nanovlm-rsi
-uv venv --python 3.12 && source .venv/bin/activate
-uv pip install -e ".[dev]"                  # or: pip install -e ".[dev]"
-
-pytest -q                                   # full suite, CPU
-python rsi.py --tiny --iters 2              # close a loop on CPU with a tiny random policy (~1 min)
-python play.py --tiny                       # watch one episode, step by step
-```
-
-Or open `quickstart.ipynb` in Colab.
-
-**The real run** (SmolVLM-256M, one GPU):
-
-```bash
-python rsi.py --update_rule weights --proposer self --static_families count_objects \
-    --iters 100 --tasks_per_iter 8 --group_size 8 --eval_every 10 --gate_n 32 \
-    --bench true --run_dir runs/headline     # --bench needs: pip install -e ".[bench]"
-
-python tools/plot.py runs/headline --x gpu_seconds --out headline.png     # needs ".[plot]"
-python evaluate.py --split heldout          # held-out only, learning off
-python evaluate.py --benchmarks             # MMStar only
-```
-
-Open-world: `pip install -e ".[craftax]"`, then `--env craftax`.
-
-## The knobs that define an experiment
-
-| Flag | Values | What it changes |
-|---|---|---|
-| `--update_rule` | `weights` · `memory` | **the carrier**: exactly one per run. `weights` = GRPO on LoRA (`--grpo_mode full` for all LM weights), `memory` = skill library |
-| `--proposer` | `fixed` · `self` | uniform sampling, or the competence-frontier curriculum |
-| `--verifier` | `outcome` · `judge` · `composite` | ground truth, a separate frozen VLM judge, or ground truth shadowed by the judge (agreement logging) |
-| `--env` | `static` · `craftax` | procedural verifiable tasks, or open-world Craftax |
-| `--gate_enabled` | `true` · `false` | turn the gate off for ablations; the trace records that you did |
-
-Carrier × proposer × verifier is a clean grid: each axis changes one component.
+59 of the 100 proposed updates passed the gate. Part of the early gain is format (parse failures
+fell from 38% to 0.5%), but success among parsed answers also rose from 4.8% to 51.8% (chance is
+about 11%). One seed, one task family, no ablations yet. The trace is in `results/`.
 
 ## What makes a result here trustworthy
 
-- **Three splits by seed hash**: train 70%, gate 10%, held-out 20%. Proposers only ever see train,
-  and this is enforced in code. Accept/reject decisions see only gate. Held-out is only used for
-  reporting, and it's frozen per `env_seed`.
-- **The gate** keeps an update only if it is on disk, actually changed something, didn't hurt the
-  gate split, came from a signal that would exist at deployment, and didn't raise the parse-failure
-  rate.
-- **Matched cost**: every rollout counts, including gate and eval ones. Plot success against
-  cost, never against iteration.
-- **Two held-out axes** reported separately: unseen seed (new image, known goal) and unseen goal.
-- **A forgetting tripwire**: full MMStar before and after, policy only.
-
-See [`docs/architecture.md`](docs/architecture.md) for every interface and for how to add your own
-environment or carrier.
-
-## Hardware
-
-The default policy is `HuggingFaceTB/SmolVLM-256M-Instruct` in bf16 with LoRA r=8 on the language
-model's q/v projections. The vision tower is frozen. The adapters train in fp32. One action takes
-about 0.16 s on an A40. Other HF image-text-to-text models load via `PolicyConfig.model_id`, but LoRA currently targets SmolVLM/Idefics3 module names (`text_model`), so other families need the LoRA scope adjusted (`policy/lora.py:apply_lora`).
+- **Three splits by seed hash**: train 70%, gate 10%, held-out 20%. The curriculum only sees train
+  (enforced in code), the gate only sees gate, held-out is only for reporting and frozen per seed.
+- **The gate** (`rsi/gate.py`) keeps an update only if it is on disk, changed something, didn't
+  lower gate-split success, came from a signal available at deployment, and didn't raise the
+  parse-failure rate. Otherwise it is reverted exactly.
+- **Matched cost**: every rollout counts, including gate and eval ones. Plot against cost, not iterations.
 
 ## Status
 
 | | |
 |---|---|
-| GRPO + LoRA carrier, skill-library carrier | ✅ |
-| static env, Craftax adapter | ✅ |
-| outcome / judge / composite verifiers, agreement logging | ✅ |
-| fixed and self-curriculum proposers | ✅ |
-| gate, trace, held-out eval, MMStar tripwire | ✅ |
-| scaffold self-edit carrier (`update/scaffold.py`) | stub, design in its docstring |
-| verifier self-improvement (`update/verifier.py`) | stub; its training data is already logged |
-
-Known limitations: rollouts in a GRPO group are generated one at a time (batching would be a
-large speedup), and memory retrieval is keyed on text only, so it can't tell apart tasks that
-share a prompt.
+| GRPO + LoRA, skill memory, frontier curriculum, gate | ✅ |
+| static env, Craftax adapter (plumbing tested, no result yet) | ✅ |
+| outcome / VLM / composite judges | ✅ |
+| scaffold self-edit, judge self-improvement | not yet |
+| OpenVLHarness (tools, larger models) | the `complex` branch |
 
 ## Contributing
 
-Same rule as nanoVLM: **no framework may own the control flow**. No `trl`, `peft`, `accelerate`
-or RL libraries. New carriers, environments and verifiers are very welcome. Each one should be one
-file behind the existing interface, with tests.
+No `trl`, `peft`, `accelerate` or RL libraries in the loop. A new env, judge or update mode is one
+file in its folder plus one line in that folder's `__init__.py`, with tests. See
+[`docs/architecture.md`](docs/architecture.md).
 
 ## Citation
 
 ```bibtex
-@misc{irawan2026nanovlmrsi,
+@misc{irawan2026picorsi,
   author       = {Patrick Amadeus Irawan},
-  title        = {nanoVLM-RSI: The simplest harness for multimodal recursive self-improvement},
+  title        = {picoRSI: a small, readable stack for multimodal self-improvement loops},
   year         = {2026},
-  howpublished = {\url{https://github.com/patrickamadeus/nanovlm-rsi}}
+  howpublished = {\url{https://github.com/patrickamadeus/picorsi}}
 }
 ```
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from infra.memory import Skill, SkillStore
+from rsi.memory import Skill, SkillStore
 from tests.conftest import fake_embed
 
 

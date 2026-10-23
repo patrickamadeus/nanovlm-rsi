@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 import torch
 
-from config import PolicyConfig
-from policy.vlm import Policy
+from configs.config import PolicyConfig
+from models.smolvlm import Policy
 
 IMG = [np.zeros((64, 64, 3), np.uint8)]
 
@@ -79,7 +79,7 @@ def test_generation_stops_at_the_end_of_the_action_line(tiny):
 
 def test_small_env_images_are_one_tile_not_upscaled_and_split():
     from transformers import AutoProcessor
-    from policy.vlm import configure_images
+    from models.smolvlm import configure_images
     proc = AutoProcessor.from_pretrained(PolicyConfig().model_id)
     configure_images(proc, 512)
     from PIL import Image
@@ -101,3 +101,9 @@ def test_cpu_policy_caps_torch_threads():
     torch.set_num_threads(64)
     Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32"))
     assert torch.get_num_threads() <= 8
+
+
+def test_greedy_decoding_is_deterministic_and_takes_a_prefix_override(tiny):
+    a = tiny.act("Which?", IMG, prefix="Answer:", greedy=True)
+    b = tiny.act("Which?", IMG, prefix="Answer:", greedy=True)
+    assert a.text == b.text and a.text.startswith("Answer:")

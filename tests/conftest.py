@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from policy.vlm import RolloutStep
+from models.smolvlm import RolloutStep
 
 
 class ScriptedPolicy:

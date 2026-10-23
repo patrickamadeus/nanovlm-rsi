@@ -12,7 +12,7 @@ class Task:
     seed: int              # drives procedural generation, fully reproducible
     goal: tuple[str, ...]  # goal spec the verifier reads
     budget: int            # max env steps — part of matched-cost accounting
-    split: str             # "train" | "gate" | "heldout" — set by the harness, never by a proposer
+    split: str             # "train" | "gate" | "heldout" — set by the harness, never by the curriculum
 
 
 @dataclass(frozen=True)

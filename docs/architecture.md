@@ -1,91 +1,64 @@
-# How nanoVLM-RSI fits together
+# How picoRSI fits together
 
-Five organs, each behind a small interface, wired by one explicit loop in `rsi.py`.
-If you read only one file, read `walkthrough.py`: the whole method, generated from the real
-source, in the order the loop runs.
+`train.py` is the whole loop. Every other folder is one part of it, and each part has one small
+contract. Only `train.py` and `evaluate.py` wire parts together; `generate.py` is a debug view.
 
 ```
-            ┌──────────── propose.py ────────────┐
-            │  fixed  |  self (competence frontier) │
-            └──────────────────┬──────────────────┘
-                               │ train-split Tasks only
-                               ▼
-  policy/vlm.py ──act()──► rollout.py ──► envs/ (static | craftax)
-        ▲                      │ Trajectory
-        │                      ▼
-        │                  verify.py  (outcome | judge | composite)
-        │                      │ ScoredTrajectory
-        │                      ▼
-        │              update/ (weights | memory)  ── propose() ──► Update
-        │                      │
-        └───── commit/revert ── infra/gate.py  (five conditions, gate split only)
-                               │
-                        infra/trace.py  (every rollout, update, eval — with cost)
-                               │
-                        evaluate.py  (held-out, frozen)   evals/benchmarks.py (MMStar)
+rsi/curriculum.py ──train-split tasks──► harness/rollout.py ──Trajectory──► judges/
+        ▲                                   │ act() each step                │ ScoredTrajectory
+        │ success table                     ▼                                ▼
+   harness/log.py ◄────── every record ── models/smolvlm.py ◄── commit ── rsi/grpo.py | rsi/memory.py
+                                                         ▲                  │ Update
+                                                         └── revert ── rsi/gate.py (gate split only)
 ```
 
-## The organs
+## Contracts
 
-| Organ | Interface | Implementations |
+| Part | Methods | Files |
 |---|---|---|
-| **Policy** | `act(prompt, images) -> RolloutStep`, `logprobs(prompt, images, token_ids)`, `embed(text, images)`, `snapshot()` / `restore()` | `policy/vlm.py` wraps any HF image-text-to-text model; `policy/lora.py` adds LoRA |
-| **Environment** | `reset(task)`, `step(action)`, `tasks(split, n, rng)`, `actions` | `envs/static.py` (numpy, CPU), `envs/craftax.py` (JAX, optional) |
-| **Verifier** | `score(trajectory) -> ScoredTrajectory` | `OutcomeVerifier`, `JudgeVerifier`, `CompositeVerifier` in `verify.py` |
-| **Update rule (carrier)** | `propose(batch) -> Update \| None`, `commit`, `revert`, `persisted` | `update/weights.py` (GRPO + LoRA), `update/memory.py` (skill library) |
-| **Proposer** | `(policy, trace) -> list[Task]` | `fixed`, `self` in `propose.py` |
+| model | `act(prompt, images) -> RolloutStep`, `logprobs(prompt, images, token_ids)`, `embed(text, images)`, `snapshot()` / `restore()` | `models/smolvlm.py`, `models/lora.py` |
+| env | `reset(task) -> Obs`, `step(action) -> (Obs, reward, done, info)`, `tasks(split, n, rng)`, `actions` | `envs/static.py`, `envs/craftax.py` |
+| judge | `score(traj) -> ScoredTrajectory` | `judges/outcome.py`, `judges/vlm.py` |
+| update | `propose(batch) -> Update \| None`, `commit`, `revert`, `persisted` | `rsi/grpo.py`, `rsi/memory.py` |
+| curriculum | `(policy, log) -> list[Task]` | `rsi/curriculum.py` |
 
-Exactly one carrier runs per experiment (`--update_rule`). The proposer is independent of it
-(`--proposer`), so carrier × proposer is a clean experimental grid.
+## Splits
 
-## What keeps a result honest
+`envs/base.py:split_for_seed` maps `crc32(seed) % 10` to train (0–6), gate (7) and held-out
+(8–9). `crc32`, not `hash()`, because Python salts `hash()` per process. The curriculum's tasks
+are re-stamped and rejected if not train. Held-out is drawn once per `env_seed` and frozen.
 
-**Three splits, by seed hash.** `envs/base.py:split_for_seed` maps `crc32(seed) % 10` to `train`
-(0–6), `gate` (7) and `heldout` (8–9). Proposers only ever see `train`; every task they return is
-re-stamped by the harness and rejected if it is not train. The gate only sees `gate`. `heldout`
-is only used for reporting. `crc32` rather than `hash()`, because Python salts `hash()` per process.
+## The gate
 
-**Frozen held-out.** `tasks("heldout", n, rng)` ignores `rng` and returns the same tasks for a
-given `env_seed`, so runs are comparable.
+For each proposed update, on the same 32 gate tasks: evaluate, commit, evaluate again, and revert
+unless all five hold — `proposed` (it has provenance), `survives_reset` (the change reloads from
+disk and actually changed something), `gate_gain` (success did not drop), `deployment_feedback`
+(the signal is in `gate_allowed_signals`), `no_regression` (parse failures rose by at most
+`gate_parse_fail_delta`). `gate_enabled: false` exists for ablations and is logged on every update.
 
-**The gate** (`infra/gate.py`) evaluates on the gate split, commits, reloads the organ from
-disk, evaluates again, and reverts unless all five hold:
+Known weakness: both gate evals sample at temperature 1 on 32 tasks, so small gains are
+indistinguishable from noise. Greedy gate evals or a margin would make it stricter.
 
-| Condition | Checked as |
-|---|---|
-| `proposed` | the update has provenance (trajectories that produced it) |
-| `survives_reset` | `updater.persisted(update)`: the change is on disk and actually changed something |
-| `gate_gain` | gate-split success after ≥ before |
-| `deployment_feedback` | the update's signal source is in `gate_allowed_verdict_sources` |
-| `no_regression` | parse-fail rate did not rise by more than `gate_parse_fail_delta` |
+## Reading a log
 
-`--gate_enabled false` exists for ablations and is recorded on every update record.
-
-**Matched cost.** Every rollout — training, gate and eval — is logged with env steps, prompt and
-completion tokens, judge tokens and model time. Compare carriers with `tools/plot.py`, which plots
-success against cumulative cost, never against iteration.
-
-## Reading a trace
-
-`runs/<name>/trace.jsonl`, one JSON object per line, every record carrying `run_id`:
+`runs/<name>/trace.jsonl`, one JSON object per line:
 
 | `kind` | One per | Key fields |
 |---|---|---|
-| `run` | run | `cfg_hash`, `git_sha`, `carrier`, `proposer`, `gate_enabled` |
-| `rollout` | episode | `family`, `goal`, `split`, `reward`, `parse_fails`, `tokens_in/out`, `gpu_seconds`, `retrieved_skill_ids`, `judge_verdict` |
-| `update` | iteration | `carrier` `role` `horizon` labels, `committed`, `conditions`, `gate_before/after`, `loss`, `discarded_groups`, `proposer_stats` |
-| `eval` | eval point | `split` (`heldout` or `mmstar`), `success_rate`, `unseen_seed_rate`, `unseen_goal_rate`, `cost` |
+| `run` | run | `config` (all of it), `cfg_hash`, `git_sha`, `update`, `curriculum`, `judge`, `env` |
+| `rollout` | episode | `family`, `goal`, `split`, `reward`, `parse_fails`, `tokens_in/out`, `gpu_seconds`, `judge_verdict` |
+| `update` | iteration | `mode`, `committed`, `conditions`, `gate_before/after`, `loss`, `curriculum_stats` |
+| `eval` | eval point | `split`, `success_rate`, `unseen_seed_rate`, `unseen_goal_rate`, `cost` |
 
 ```python
-from infra.trace import Trace
-tr = Trace("runs/headline")
-[(e["cost"]["gpu_seconds"], e["success_rate"]) for e in tr.records("eval") if e["split"] == "heldout"]
+from harness.log import Trace
+[(e["cost"]["gpu_seconds"], e["success_rate"]) for e in Trace("runs/count_grpo").records("eval")]
 ```
 
 ## Adding an environment
 
-Subclass `Env` and the `SeededTasks` mixin, make each task a pure function of its seed, and
-declare which families have a programmatic checker:
+Subclass `Env` and the `SeededTasks` mixin, make each task a pure function of its seed, then add one
+branch to `envs/__init__.py:make_env`:
 
 ```python
 from envs.base import Env, Obs, SeededTasks, Task, split_for_seed
@@ -106,19 +79,11 @@ class MyEnv(SeededTasks, Env):
     def step(self, action): ...           # -> (Obs, reward, done, {"steps": t})
 ```
 
-Then add a branch to `make_env` in `rsi.py`. Keep actions to things a small VLM would naturally
-say: the count task uses bare digits because SmolVLM answers "3", not "say_3".
+Keep actions to things a small VLM would naturally say: the count task uses bare digits because
+SmolVLM answers "3", not "say_3".
 
-## Adding a carrier
+## Adding an update mode
 
-Subclass `update.base.Updater` and register it in `update/__init__.py:make_updater`:
-
-- `propose(batch)` returns an `Update` labelled with its carrier, role and horizon, or `None` when
-  the batch carries no signal.
-- `commit(update)` applies it **durably** (to disk).
-- `revert(update)` undoes it **exactly**. The gate depends on this.
-- `persisted(update)` rebuilds the organ from disk and reports whether the change is there and
-  actually changed something. A commit that changed nothing must return `False`.
-
-`update/scaffold.py` (prompt self-edit) and `update/verifier.py` (judge self-improvement) are
-stubs with their designs in the docstrings — good first carriers to implement.
+A class with the four methods in the table, registered in `rsi/__init__.py:make_update`. `commit`
+must write to disk, `revert` must undo exactly, and `persisted` must return `False` for a commit
+that changed nothing — the gate relies on all three.

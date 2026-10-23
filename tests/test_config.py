@@ -1,4 +1,4 @@
-from config import LoopConfig, PolicyConfig
+from configs.config import LoopConfig, PolicyConfig
 
 
 def test_config_hash_is_stable_and_sensitive():
@@ -9,8 +9,8 @@ def test_config_hash_is_stable_and_sensitive():
 
 def test_defaults_match_spec():
     cfg = LoopConfig()
-    assert cfg.update_rule == "memory"
-    assert cfg.proposer == "fixed"
+    assert cfg.update == "grpo"
+    assert cfg.curriculum == "uniform"
     assert cfg.group_size == 8
     assert cfg.gate_enabled is True
     assert cfg.heldout_n == 200

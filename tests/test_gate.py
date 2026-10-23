@@ -2,14 +2,15 @@ from dataclasses import replace
 
 import pytest
 
-from config import LoopConfig
+from configs.config import LoopConfig
 from envs.base import Task
 from envs.static import StaticEnv
-from infra.gate import gate
-from infra.memory import SkillStore
+from rsi.gate import gate
+from rsi.memory import SkillStore
 from tests.conftest import fake_embed
-from update.memory import MemoryUpdater
-from verify import ScoredTrajectory, Trajectory
+from rsi.memory import Memory
+from harness.rollout import Trajectory
+from judges.outcome import ScoredTrajectory
 
 TASK = Task("count_objects", 2, ("3",), 1, "train")
 
@@ -23,7 +24,7 @@ improving = lambda: evals((0.2, 0.1), (0.5, 0.1))        # (success_rate, parse_
 worsening = lambda: evals((0.5, 0.1), (0.2, 0.1))
 
 
-class ForgetfulUpdater(MemoryUpdater):
+class ForgetfulUpdater(Memory):
     def commit(self, update):                            # claims success but writes nothing to disk
         pass
 
@@ -32,7 +33,7 @@ class ForgetfulUpdater(MemoryUpdater):
 def setup(tmp_path):
     store = SkillStore(str(tmp_path / "skills.jsonl"), embed_fn=fake_embed)
     cfg = LoopConfig(gate_n=4, run_dir=str(tmp_path))
-    up = MemoryUpdater(store, cfg)
+    up = Memory(store, cfg)
     t = Trajectory(TASK, [{"action": "3", "obs_text": "count the squares"}], 1.0, 1, 0, 3)
     update = up.propose([ScoredTrajectory(t, 1.0, None, "outcome", 1.0, ())])
     return up, update, StaticEnv(), cfg, store

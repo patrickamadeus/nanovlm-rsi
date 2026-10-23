@@ -20,6 +20,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: hf-${{ hashFiles('config.py') }}
+          key: hf-${{ hashFiles('configs/config.py') }}
       - name: Tests
         run: uv run --no-sync pytest -q

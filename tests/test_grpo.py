@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from config import LoopConfig, PolicyConfig
+from configs.config import LoopConfig, PolicyConfig
 from envs.base import Task
-from update.weights import WeightsUpdater, group_advantages, grpo_token_loss
-from verify import ScoredTrajectory, Trajectory
+from rsi.grpo import GRPO, group_advantages, grpo_token_loss
+from harness.rollout import Trajectory
+from judges.outcome import ScoredTrajectory
 
 
 def test_group_advantages_are_relative_within_each_task_group():
@@ -47,10 +48,10 @@ IMG = np.zeros((64, 64, 3), np.uint8)
 
 @pytest.fixture
 def setup(tmp_path):
-    from policy.vlm import Policy
+    from models.smolvlm import Policy
     policy = Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=6))
     cfg = LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, grpo_beta=0.0)
-    return policy, WeightsUpdater(policy, cfg), cfg
+    return policy, GRPO(policy, cfg), cfg
 
 
 def _traj(policy, task, reward, prompt="count the squares"):
@@ -72,10 +73,10 @@ def test_lora_is_enabled_and_only_adapters_train(setup):
     assert trainable and all(n.endswith((".A", ".B")) and "text_model" in n for n in trainable)
 
 
-def test_update_carries_weights_carrier_labels(setup):
+def test_update_is_labelled_grpo(setup):
     policy, up, _ = setup
     u = up.propose(_batch(policy))
-    assert (u.carrier, u.role, u.horizon) == ("A5", "B0", "C3") and u.provenance
+    assert u.mode == "grpo" and u.provenance
 
 
 def test_degenerate_batch_proposes_nothing(setup):

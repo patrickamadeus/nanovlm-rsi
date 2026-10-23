@@ -3,31 +3,31 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nanovlm-rsi"
+name = "picorsi"
 version = "0.1.0"
-description = "The simplest harness for multimodal recursive self-improvement research, in plain PyTorch."
+description = "A small, readable stack for multimodal self-improvement loops, in plain PyTorch."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Patrick Amadeus Irawan", email = "patrickai0309@gmail.com" }]
-dependencies = ["torch", "numpy", "transformers>=4.50", "pillow", "safetensors"]
+dependencies = ["torch", "numpy", "transformers>=4.50", "pillow", "safetensors", "pyyaml"]
 
 [project.urls]
-Homepage = "https://github.com/patrickamadeus/nanovlm-rsi"
+Homepage = "https://github.com/patrickamadeus/picorsi"
 
 [project.optional-dependencies]
 craftax = ["jax", "craftax"]
-bench = ["datasets"]
+eval = ["lmms-eval @ git+https://github.com/EvolvingLMMs-Lab/lmms-eval.git"]
 plot = ["matplotlib"]
 wandb = ["wandb"]
 dev = ["pytest", "matplotlib"]
 
 [tool.setuptools]
-py-modules = ["config", "rsi", "rollout", "evaluate", "play", "propose", "verify"]
-packages = ["envs", "policy", "infra", "update", "evals", "tools"]
+py-modules = ["train", "evaluate", "generate"]
+packages = ["configs", "models", "envs", "judges", "rsi", "harness"]
 
 [tool.setuptools.package-data]
-"*" = ["*.txt"]
+"*" = ["*.txt", "*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

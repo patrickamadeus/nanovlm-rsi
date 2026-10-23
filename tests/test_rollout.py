@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from config import LoopConfig
+from configs.config import LoopConfig
 from envs.static import StaticEnv
-from rollout import rollout
+from harness.rollout import rollout
 from tests.conftest import ScriptedPolicy
 
 cfg = LoopConfig()
