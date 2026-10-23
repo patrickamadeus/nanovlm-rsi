@@ -107,3 +107,18 @@ def test_greedy_decoding_is_deterministic_and_takes_a_prefix_override(tiny):
     a = tiny.act("Which?", IMG, prefix="Answer:", greedy=True)
     b = tiny.act("Which?", IMG, prefix="Answer:", greedy=True)
     assert a.text == b.text and a.text.startswith("Answer:")
+
+
+def test_policy_never_emits_image_placeholder_tokens(tiny):
+    # a sampled <image> token makes the re-scoring forward pass count more image slots than images
+    image_id = tiny.processor.tokenizer.convert_tokens_to_ids("<image>")
+    head = tiny.model.get_output_embeddings()
+    with torch.no_grad():
+        saved = head.weight[image_id].clone()
+        head.weight[image_id] = 50.0 * head.weight.abs().max()     # make <image> the argmax everywhere
+    try:
+        ids = tiny.act("hello", IMG, greedy=True).token_ids
+        assert ids and image_id not in ids
+    finally:
+        with torch.no_grad():
+            head.weight[image_id] = saved
