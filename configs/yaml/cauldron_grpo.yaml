@@ -1,0 +1,14 @@
+# GRPO on real VQA: the checkable turns of The Cauldron's 1% sample (letters, yes/no, numbers 0-20).
+# Same loop and budget as count_grpo. Needs: pip install -e ".[cauldron]"
+env: cauldron
+cauldron_subset: sample_1pct
+judge: outcome
+update: grpo
+curriculum: frontier
+iters: 100
+tasks_per_iter: 8
+group_size: 8
+eval_every: 10
+eval_n: 200
+gate_n: 32
+run_dir: runs/cauldron_grpo
