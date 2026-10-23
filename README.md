@@ -110,7 +110,7 @@ an earlier run of the same config reached 51.5%. The full trace is in `results/`
 | static env, Craftax adapter (plumbing tested, no result yet) | ✅ |
 | outcome / VLM / composite judges | ✅ |
 | scaffold self-edit, judge self-improvement | not yet |
-| OpenVLHarness (tools, larger models) | the `complex` branch |
+| OpenVLHarness (tools, served Qwen3-VL) | this branch: `harness: openvlharness`, see [`docs/openvlharness.md`](docs/openvlharness.md) |
 
 ## Contributing
 
