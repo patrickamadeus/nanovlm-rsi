@@ -1,4 +1,4 @@
-# The headline run: GRPO on LoRA teaches SmolVLM-256M to count (3.0% -> 51.5% held-out, ~77 min on an A40).
+# The headline run: GRPO on LoRA teaches SmolVLM-256M to count (6.0% -> 48.0% held-out, ~70 min on an A40).
 env: static
 static_families: [count_objects]
 judge: outcome

@@ -77,19 +77,21 @@ policy answers (greedy, the model's standard image pipeline), trained LoRA inclu
 ## Result
 
 GRPO teaches SmolVLM-256M to count objects in images it has never seen
-(`configs/count_grpo.yaml`, 77 min on one A40):
+(`python train.py --config count_grpo`, 70 min on one A40):
 
 ![held-out success vs GPU seconds](assets/headline.png)
 
 | | before | after 100 iterations |
 |---|---:|---:|
-| **held-out success** (200 frozen tasks, new images) | **3.0%** | **51.5%** |
-| parse-failure rate | 38.0% | 0.5% |
-| success when the answer parsed | 4.8% | 51.8% |
+| **held-out success** (200 frozen tasks, new images) | **6.0%** | **48.0%** |
+| parse-failure rate | 45% | 0% |
+| success when the answer parsed | 10.9% (chance ≈ 11%) | 48.0% |
+| **MMStar** (all 1,500, lmms-eval; forgetting check) | 26.8% ± 1.2 | 26.9% ± 1.2 |
 
-59 of the 100 proposed updates passed the gate. Part of the early gain is format (parse failures
-fell from 38% to 0.5%), but success among parsed answers also rose from 4.8% to 51.8% (chance is
-about 11%). One seed, one task family, no ablations yet. The trace is in `results/`.
+55 of the 100 proposed updates passed the gate. Part of the early gain is format (every answer
+parses by the end), but the counting itself went from chance to 48%. All nine count goals appear
+in training, so this is generalization to new images, not to new goals. One seed, one task family;
+an earlier run of the same config reached 51.5%. The full trace is in `results/`.
 
 ## What makes a result here trustworthy
 
