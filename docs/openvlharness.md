@@ -33,14 +33,30 @@ python train.py --config ovh_count_memory
 on your machine without a sandbox (OpenVLHarness's own warning), so it is opt-in: use it only inside
 a container or VM you're comfortable with, and point both the router and `ovh_config` at it.
 
-## First numbers (20 held-out count tasks, no learning)
+## First numbers
 
 | | held-out success |
 |---|---:|
 | SmolVLM-256M, pico harness, before GRPO | 3.0% |
 | SmolVLM-256M, pico harness, after GRPO | 51.5% |
-| Qwen3-VL-2B, OpenVLHarness (zoom + coding), no learning | 35% (7/20) |
+| Qwen3-VL-2B, OpenVLHarness (zoom + coding), no learning, 20 tasks | 35% (7/20) |
+| Qwen3-VL-2B, OpenVLHarness (zoom only), no learning, 40 tasks | 52.5% |
 
 Every one of the 20 episodes used tools. 4 of 20 hit the 8-turn limit without answering, and the 2B
 model often calls tools that aren't configured (e.g. `Visual_Grounding_Tool`) — tool-use errors a
 scaffold or memory update could learn to avoid.
+
+## A memory loop through OpenVLHarness (`--config ovh_count_memory`)
+
+6 iterations, 4 tasks × 2 rollouts each, 40 held-out tasks, 43 minutes, 2.7M tokens:
+
+| eval at iteration | 0 | 3 | final |
+|---|---:|---:|---:|
+| held-out success | 52.5% | 65.0% | 40.0% |
+
+The gate rejected 5 of the 6 memory updates: putting recalled skills ("- How many blue squares…
+-> 3") into the question lowered gate-split success. So this run shows the plumbing and the gate
+working, **not** improvement: for a 2B model with tools, copying past answers into the prompt is not
+a useful skill format, and 40-task evals swing by ±15 points. Better next steps here are skills that
+describe *procedure* (e.g. "zoom into each quadrant, then add") rather than answers, larger evals,
+and scaffold edits targeting the tool-call errors above.
