@@ -1,0 +1,25 @@
+# The autonomous loop on frozenlake: the policy picks (or invents) its next level, hindsight turns failures into
+# successes for the goal they reached, ViSkill keeps visual cards of what worked, GRPO trains the weights.
+# Nobody chooses tasks or labels anything after launch. No gate, as in VAGEN and SIMA 2: held-out eval reports.
+env: frozenlake
+methods: [hindsight, viskill, grpo]
+planner: voyager
+iters: 40
+tasks_per_iter: 8
+group_size: 8
+eval_every: 10
+eval_n: 200
+gate_n: 32
+grpo_lr: 3.0e-4                 # picked on FrozenLake: 7.5% -> 37.5% held-out by iteration 10 (1e-4: 33%)
+run_dir: runs/frozenlake_auto
+gate_enabled: false
+# skill settings from ViSkill: one card, shown only if close enough; only optimal-length successes are kept
+mem_top_k: 1
+mem_retrieve_alpha: 0.9
+mem_retrieve_min: 0.8
+mem_dedupe_sim: 0.9
+mem_max_excess_steps: 2         # ViSkill keeps only optimal successes (0); 2 lets hindsight copies in
+policy:
+  scaffold_path: utils/scaffold_agent.txt
+  model_id: Qwen/Qwen2.5-VL-3B-Instruct
+  max_new_tokens: 16
