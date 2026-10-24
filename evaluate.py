@@ -55,7 +55,7 @@ def run_tasks(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, 
 
 
 def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *, methods=(),
-             final: bool = False) -> EvalResult:
+             final: bool = False, env_name: str | None = None) -> EvalResult:
     trained_goals = {(r.get("family"), tuple(r.get("goal", ()))) for r in log.records("rollout")
                      if r.get("split") == "train"}
     with paired_randomness(cfg.seed + 1):     # every held-out point of a run, and every run, sees the same draws
@@ -73,7 +73,7 @@ def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *
     log.log_eval(split=result.split, n=result.n, success_rate=result.success_rate,
                  unseen_seed_rate=result.unseen_seed_rate, unseen_goal_rate=result.unseen_goal_rate,
                  n_unseen_seed=len(seen), n_unseen_goal=len(unseen), by_key={k: _rate(v) for k, v in by_key.items()},
-                 parse_fail_rate=result.parse_fail_rate, cost=result.cost, final=final)
+                 parse_fail_rate=result.parse_fail_rate, cost=result.cost, final=final, env=env_name or cfg.env)
     return result
 
 

@@ -11,7 +11,7 @@
 import argparse
 import os
 import subprocess
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 
 import numpy as np
 
@@ -27,22 +27,31 @@ from utils.rollout import rollout_group, rollout_record, timed
 
 def train(cfg: LoopConfig, policy=None) -> EvalResult:
     check_run_dir(cfg)
+    stages   = cfg.env.split(">")                             # "frozenlake>sokoban>craftax": lifelong, in order
     policy   = policy or make_policy(cfg.policy)
-    env      = make_env(cfg)
+    envs     = {name: make_env(replace(cfg, env=name)) for name in stages}
     log      = Trace(cfg.run_dir)
-    judge    = make_judge(cfg, env)
-    methods  = make_methods(cfg, policy, env)                # grpo, memory, ... in config order
-    planner  = make_planner(env, cfg, log, policy)           # which tasks
+    judge    = make_judge(cfg, envs[stages[0]])
+    methods  = make_methods(cfg, policy, envs[stages[0]])     # grpo, memory, ... in config order
     chooser  = make_update_planner(cfg, [m.name for m in methods if m.changes])   # which methods update
-    heldout  = env.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed))   # frozen per env_seed
-    eval_fn  = make_eval_fn(policy, env, log, cfg, methods)
+    heldout  = {name: e.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed)) for name, e in envs.items()}
     log.log_run(cfg_hash=cfg.hash(), git_sha=git_sha(), methods=list(cfg.methods), planner=cfg.planner,
                 update_planner=cfg.update_planner, judge=cfg.judge, env=cfg.env, gate_enabled=cfg.gate_enabled,
                 config=asdict(cfg))
+    per_stage, stage = max(cfg.iters // len(stages), 1), None
 
     for it in range(cfg.iters):
+        if stages[min(it // per_stage, len(stages) - 1)] != stage:      # a new stage: new tasks, same agent
+            stage = stages[min(it // per_stage, len(stages) - 1)]
+            env = envs[stage]
+            planner = make_planner(env, cfg, log, policy)         # which tasks
+            eval_fn = make_eval_fn(policy, env, log, cfg, methods)
+            for m in methods:
+                if hasattr(m, "env"):
+                    m.env = env
         if it % cfg.eval_every == 0:                         # it == 0 is the pre-RSI baseline
-            evaluate(policy, env, heldout, log, cfg, methods=methods)
+            for name, e in envs.items():                     # every stage, every time: the retention matrix
+                evaluate(policy, e, heldout[name], log, cfg, methods=methods, env_name=name)
 
         tasks = planner.tasks(cfg.tasks_per_iter)            # train split only
         contexts, ctx_s = timed(contexts_for, methods, env, tasks)
@@ -52,7 +61,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
         for traj in trajs:
             scored = judge.score(traj)
             log.log_rollout(**rollout_record(traj, scored.verdict_source, ctx_s / len(trajs), env.task_key(traj.task)),
-                            flags=scored.flags, iter=it, judge_verdict=scored.judge_verdict,
+                            flags=scored.flags, iter=it, stage=stage, judge_verdict=scored.judge_verdict,
                             judge_tokens=scored.judge_tokens)
             batch.append(scored)
         for m in methods:                                    # hindsight, skill rewards: reshape before anyone learns
@@ -80,7 +89,10 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
         planner.observe(batch, results)
         chooser.observe(batch, results)
 
-    return evaluate(policy, env, heldout, log, cfg, methods=methods, final=True)
+    final = None
+    for name, e in envs.items():
+        final = evaluate(policy, e, heldout[name], log, cfg, methods=methods, env_name=name, final=True)
+    return final
 
 
 def check_run_dir(cfg: LoopConfig) -> None:

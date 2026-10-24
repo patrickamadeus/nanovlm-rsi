@@ -108,3 +108,14 @@ def test_every_method_runs_together_in_the_loop(tmp_path, planner, update_planne
     assert isinstance(train(cfg), EvalResult)
     updates = Trace(str(tmp_path)).records("update")
     assert {u["method"] for u in updates} <= {"viskill", "expel", "reflexion", "grpo", "ppo", "rest"}
+
+
+def test_lifelong_stages_switch_envs_and_evaluate_every_stage_each_time(tmp_path):
+    cfg = LoopConfig(env="frozenlake>sokoban", iters=4, tasks_per_iter=1, group_size=2, eval_every=2, eval_n=2,
+                     gate_n=2, heldout_n=8, run_dir=str(tmp_path), methods=("viskill",), mem_top_k=1)
+    train(cfg, policy=ScriptedPolicy(cycle(["ACT: up", "ACT: right"])))
+    tr = Trace(str(tmp_path))
+    stages = [r["stage"] for r in tr.records("rollout") if r.get("iter") is not None]
+    assert stages[0] == "frozenlake" and stages[-1] == "sokoban"
+    evals = tr.records("eval")
+    assert [e["env"] for e in evals] == ["frozenlake", "sokoban"] * 3      # it 0, it 2, final
