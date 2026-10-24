@@ -1,4 +1,16 @@
-"""The environment contract. Every env — numpy or JAX — fits these four methods."""
+"""The environment contract. Every env — numpy or JAX — fits four required methods, plus optional hooks.
+
+Required:  reset(task) -> Obs · step(action) -> (Obs, reward, done, info) · tasks(split, n, rng) · actions
+Optional (the default means "not supported", and a method that needs one checks for None):
+  solve(task)            an optimal action list: solver baselines, ViSkill's length check
+  descriptor(task)       a small vector of the start layout: ViSkill retrieves skills by it
+  relabel(task, actions) hindsight: the goal this attempt *did* reach, as (new task, actions that reach it)
+  task_key(task)         the bucket a planner tracks success in (family + level by default)
+  fork()                 an independent copy, so a group of attempts can run in lockstep
+
+envs/template.py is a commented, empty env to copy when adding a new one.
+"""
+import copy
 import zlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
@@ -13,12 +25,18 @@ class Task:
     goal: tuple[str, ...]  # goal spec the verifier reads
     budget: int            # max env steps — part of matched-cost accounting
     split: str             # "train" | "gate" | "heldout" — set by the harness, never by the curriculum
+    level: tuple = ()      # generator parameters (grid size, holes, boxes): what a level-editing planner changes
 
 
 @dataclass(frozen=True)
 class Obs:
     rgb: np.ndarray        # [H,W,3] uint8 — mandatory, the policy is genuinely multimodal
     text: str | None = None
+
+
+def parse_levels(levels) -> tuple[tuple[int, ...], ...]:
+    """Levels from YAML ([[4, 3]]) or the CLI ("4x3,5x6") become tuples of ints."""
+    return tuple(tuple(int(x) for x in (lv.split("x") if isinstance(lv, str) else lv)) for lv in levels)
 
 
 def split_for_seed(seed: int) -> str:
@@ -85,3 +103,19 @@ class Env(ABC):
     @abstractmethod
     def actions(self) -> list[str]:
         """Legal action strings, shown to the policy in the prompt."""
+
+    def solve(self, task: Task) -> list[str] | None:
+        return None
+
+    def descriptor(self, task: Task) -> np.ndarray | None:
+        return None
+
+    def relabel(self, task: Task, actions: list[str]) -> tuple[Task, list[str]] | None:
+        return None
+
+    def task_key(self, task: Task) -> str:
+        return ":".join([task.family, *map(str, task.level)])
+
+    def fork(self) -> "Env":
+        """Shallow copy: safe because reset() rebinds every piece of episode state rather than mutating it."""
+        return copy.copy(self)

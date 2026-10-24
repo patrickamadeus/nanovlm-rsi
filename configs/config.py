@@ -25,7 +25,7 @@ class PolicyConfig:
 @dataclass
 class LoopConfig:
     # what runs: one choice per folder
-    env: str = "static"            # envs/:    "static" | "craftax" | "cauldron"
+    env: str = "static"            # envs/:    "static" | "frozenlake" | "sokoban" | "craftax" | "cauldron"
     judge: str = "outcome"         # judges/:  "outcome" | "vlm" | "composite"
     update: str = "grpo"           # rsi/:     "grpo" | "memory"  — exactly one per run
     curriculum: str = "uniform"    # rsi/:     "uniform" | "frontier"
@@ -40,6 +40,8 @@ class LoopConfig:
     # envs
     env_seed: int = 0              # fixes the frozen held-out set
     static_families: tuple[str, ...] = ("count_objects", "gather_order")
+    frozenlake_levels: tuple[tuple[int, int], ...] = ((4, 3),)   # (size, holes) per level; ViSkill/VAGEN use 4x4
+    sokoban_levels: tuple[tuple[int, int], ...] = ((6, 1),)      # (size, boxes); ViSkill/VAGEN use 6x6 with one box
     craftax_budget: int = 64
     cauldron_repo: str = "patrickamadeus/the_cauldron"
     cauldron_subset: str = "sample_1pct"      # 17k rows, ~11k checkable tasks; also sample_10pct ... all
