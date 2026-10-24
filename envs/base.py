@@ -6,6 +6,7 @@ Optional (the default means "not supported", and a method that needs one checks 
   descriptor(task)       a small vector of the start layout: ViSkill retrieves skills by it
   relabel(task, actions) hindsight: the goal this attempt *did* reach, as (new task, actions that reach it)
   task_key(task)         the bucket a planner tracks success in (family + level by default)
+  edit(task, rng)        a nearby new level (harder or easier, new layout): what rsi/accel.py mutates
   fork()                 an independent copy, so a group of attempts can run in lockstep
 
 envs/template.py is a commented, empty env to copy when adding a new one.
@@ -52,6 +53,14 @@ def split_for_seed(seed: int) -> str:
 def stamp_split(task: Task) -> Task:
     """The harness, not the caller, decides which split a task belongs to."""
     return replace(task, split=split_for_seed(task.seed))
+
+
+def train_seed(rng: np.random.Generator) -> int:
+    """A fresh seed whose split is train: what a planner that writes its own tasks must use."""
+    while True:
+        seed = int(rng.integers(0, 2**31 - 1))
+        if split_for_seed(seed) == "train":
+            return seed
 
 
 def draw_tasks(make_task, split: str, n: int, rng: np.random.Generator) -> list[Task]:
@@ -111,6 +120,9 @@ class Env(ABC):
         return None
 
     def relabel(self, task: Task, actions: list[str]) -> tuple[Task, list[str]] | None:
+        return None
+
+    def edit(self, task: Task, rng: np.random.Generator) -> Task | None:
         return None
 
     def task_key(self, task: Task) -> str:

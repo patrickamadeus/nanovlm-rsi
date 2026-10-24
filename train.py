@@ -32,7 +32,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
     log      = Trace(cfg.run_dir)
     judge    = make_judge(cfg, env)
     methods  = make_methods(cfg, policy, env)                # grpo, memory, ... in config order
-    planner  = make_planner(env, cfg, log)                   # which tasks
+    planner  = make_planner(env, cfg, log, policy)           # which tasks
     chooser  = make_update_planner(cfg, [m.name for m in methods if m.changes])   # which methods update
     heldout  = env.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed))   # frozen per env_seed
     eval_fn  = make_eval_fn(policy, env, log, cfg, methods)
@@ -62,7 +62,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
         names = chooser.updates([m.name for m in methods if m.changes])
         for m in (m for m in methods if m.name in names):
             update = m.propose(batch)
-            stats = getattr(planner, "last_stats", None)
+            stats = {**(getattr(planner, "last_stats", None) or {}), **(getattr(chooser, "last_stats", None) or {})}
             if update is None:
                 log.log_update(iter=it, method=m.name, committed=False, gate_enabled=cfg.gate_enabled,
                                reason="no usable signal", planner_stats=stats)

@@ -95,6 +95,14 @@ class LoopConfig:
     frontier_unseen_weight: float = 1.0
     frontier_off_band_weight: float = 0.05
 
+    # planners: rsi/tscl.py, rsi/accel.py, rsi/exp3.py (rsi/voyager.py falls back to tscl)
+    tscl_alpha: float = 0.3        # smoothing of the success-rate slope
+    accel_replay: float = 0.5      # share of slots that replay (or edit) a buffered level
+    accel_edit: float = 0.5        # share of replays that become an edited new level
+    accel_buffer: int = 64
+    exp3_gamma: float = 0.2        # exploration of the update bandit
+    exp3_k: int = 1                # updating methods run per iteration
+
     policy: PolicyConfig = field(default_factory=PolicyConfig)
 
     def hash(self) -> str:

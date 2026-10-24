@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from envs.base import Env, Obs, SeededTasks, Task, parse_levels, split_for_seed
+from envs.base import Env, Obs, SeededTasks, Task, parse_levels, split_for_seed, train_seed
 
 MOVES = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 CELL = 48
@@ -181,6 +181,13 @@ class SokobanEnv(SeededTasks, Env):
         w = self._world
         return Obs(render(self._task.level[0], w.walls, w.targets, self._boxes, self._player),
                    f"{RULES} Step {self._t} of {self._task.budget}.")
+
+    def edit(self, task: Task, rng: np.random.Generator) -> Task | None:
+        """ACCEL's editor: one step bigger or smaller, one box more or fewer, on a fresh train layout."""
+        size, boxes = task.level
+        size = int(np.clip(size + rng.integers(-1, 2), 5, 9))
+        boxes = int(np.clip(boxes + rng.integers(-1, 2), 1, 3))
+        return self.make_task(train_seed(rng), (size, boxes))
 
     def solve(self, task: Task) -> list[str] | None:
         w = self._start(task)

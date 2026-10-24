@@ -12,7 +12,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from envs.base import Env, Obs, SeededTasks, Task, parse_levels, split_for_seed
+from envs.base import Env, Obs, SeededTasks, Task, parse_levels, split_for_seed, train_seed
 
 MOVES = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 CELL = 48
@@ -109,6 +109,13 @@ class FrozenLakeEnv(SeededTasks, Env):
     def _obs(self) -> Obs:
         return Obs(render(self._size, self._holes, self._goal, self._agent),
                    f"{RULES} Step {self._t} of {self._task.budget}.")
+
+    def edit(self, task: Task, rng: np.random.Generator) -> Task | None:
+        """ACCEL's editor: one step bigger or smaller, one hole more or fewer, on a fresh train layout."""
+        size, holes = task.level
+        size = int(np.clip(size + rng.integers(-1, 2), 3, 8))
+        holes = int(np.clip(holes + rng.integers(-1, 2), 0, size * size // 3))
+        return self.make_task(train_seed(rng), (size, holes))
 
     def solve(self, task: Task) -> list[str] | None:
         size, start, goal, holes = self._world(task)

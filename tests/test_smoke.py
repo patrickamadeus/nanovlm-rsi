@@ -1,4 +1,6 @@
 import time
+
+import pytest
 from itertools import cycle
 
 from configs.config import LoopConfig, PolicyConfig
@@ -94,3 +96,15 @@ def test_unknown_config_key_is_an_error(tmp_path):
     bad.write_text("iterz: 3\n")
     with pytest.raises(TypeError):
         load_config(str(bad))
+
+
+@pytest.mark.parametrize("planner,update_planner", [("accel", "exp3"), ("voyager", "all"), ("tscl", "all")])
+def test_every_method_runs_together_in_the_loop(tmp_path, planner, update_planner):
+    cfg = LoopConfig(env="frozenlake", frozenlake_levels=((3, 1), (4, 3)), iters=2, tasks_per_iter=2, group_size=2,
+                     eval_every=1, eval_n=4, gate_n=4, heldout_n=8, run_dir=str(tmp_path), gate_enabled=False,
+                     methods=("hindsight", "viskill", "expel", "reflexion", "grpo", "ppo", "rest"),
+                     planner=planner, update_planner=update_planner, mem_top_k=1,
+                     policy=PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=4))
+    assert isinstance(train(cfg), EvalResult)
+    updates = Trace(str(tmp_path)).records("update")
+    assert {u["method"] for u in updates} <= {"viskill", "expel", "reflexion", "grpo", "ppo", "rest"}

@@ -61,8 +61,17 @@ def skill_store(cfg, policy):
                       max_size=cfg.mem_max_size, dedupe_sim=cfg.mem_dedupe_sim)
 
 
-def make_planner(env, cfg, log=None):
+def make_planner(env, cfg, log=None, policy=None):
     rng = np.random.default_rng(cfg.seed)
+    if cfg.planner == "tscl":
+        from rsi.tscl import TSCL
+        return TSCL(env, cfg, rng, log)
+    if cfg.planner == "accel":
+        from rsi.accel import ACCEL
+        return ACCEL(env, cfg, rng, log)
+    if cfg.planner == "voyager":
+        from rsi.voyager import Voyager
+        return Voyager(env, cfg, rng, policy, log)
     if cfg.planner == "uniform":
         from rsi.curriculum import Uniform
         return Uniform(env, cfg, rng, log)
@@ -77,6 +86,9 @@ def make_update_planner(cfg, names: list[str]):
     if cfg.update_planner == "all":
         from rsi.base import Planner
         return Planner()
+    if cfg.update_planner == "exp3":
+        from rsi.exp3 import Exp3
+        return Exp3(cfg, names, np.random.default_rng(cfg.seed + 1))
     raise ValueError(f"unknown update planner {cfg.update_planner!r}")
 
 
