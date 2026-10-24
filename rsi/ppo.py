@@ -8,7 +8,7 @@ carries signal and no group is needed. Rewards here arrive at the end of an epis
 
 V reads the policy's hidden state at the last prompt token, detached: the head learns, the trunk is moved only
 by the policy loss. That is a cheaper critic than ViSkill's separate one (a full copy of the model), on purpose.
-Value targets come from the same batch, before the step: one gradient step per batch, like every weight method.
+Advantages use the values from before the update; the head takes one step per minibatch alongside the policy.
 """
 import copy
 import os
@@ -17,7 +17,7 @@ import torch
 from safetensors.torch import save_file
 
 from rsi.grpo import grpo_token_loss
-from rsi.weights import WeightMethod, old_logprobs
+from rsi.weights import WeightMethod, _args
 
 
 class PPO(WeightMethod):
@@ -37,67 +37,44 @@ class PPO(WeightMethod):
             from safetensors.torch import load_file
             self.head.load_state_dict({k: v.to(self.policy.device) for k, v in load_file(self.head_path).items()})
 
-    def backward(self, batch: list) -> dict | None:
+    def prepare(self, batch: list) -> dict | None:
         runs = [s for s in batch if not s.flags and s.origin == "attempt"]
-        items = [(st, s.reward) for s in runs for st in s.traj.steps if st["token_ids"]]
-        if not items:
+        turns = [(st, s.reward) for s in runs for st in s.traj.steps if st["token_ids"]]
+        if not turns:
             return None
-        chunks = [items[i:i + self.cfg.micro_batch] for i in range(0, len(items), self.cfg.micro_batch)]
         feats = []
-        with torch.no_grad():                    # pass 1: every turn's state, so advantages normalise over the batch
-            for chunk in chunks:
-                feats.append(self.policy.logprobs_batch(*self._args(chunk), hidden=True)[1])
-        feats = torch.cat(feats)
-        if self.head is None:
-            self._make_head(feats.shape[1])
-        returns = torch.tensor([r for _, r in items], device=feats.device, dtype=torch.float32)
-        self.head_opt.zero_grad(set_to_none=True)
-        values = self.head(feats).squeeze(-1)
-        value_loss = ((values - returns) ** 2).mean()
-        value_loss.backward()
-        adv = returns - values.detach()
+        with torch.no_grad():                # every turn's state, so advantages normalise over the batch
+            for i in range(0, len(turns), self.cfg.micro_batch):
+                chunk = [t for t, _ in turns[i:i + self.cfg.micro_batch]]
+                feats.append(self.policy.logprobs_batch(*_args(chunk), hidden=True)[1])
+            feats = torch.cat(feats)
+            if self.head is None:
+                self._make_head(feats.shape[1])
+            returns = torch.tensor([r for _, r in turns], device=feats.device, dtype=torch.float32)
+            values = self.head(feats).squeeze(-1)
+        adv = returns - values
         if len(adv) > 1 and adv.std() > 0:
             adv = (adv - adv.mean()) / (adv.std() + 1e-6)
-        n_tokens = sum(len(st["token_ids"]) for st, _ in items)
-        total, k = 0.0, 0
-        for chunk in chunks:                     # pass 2: the policy loss, with gradients
-            lps = self.policy.logprobs_batch(*self._args(chunk))
-            loss = 0.0
-            for (st, _), lp in zip(chunk, lps):
-                loss = loss + grpo_token_loss(lp, old_logprobs(self.policy, st, lp), None, adv=float(adv[k]),
-                                              clip=self.cfg.grpo_clip, beta=0.0).sum()
-                k += 1
-            loss = loss / n_tokens
-            loss.backward()
-            total += loss.item()
-        return {"used": runs, "loss": total, "value_loss": value_loss.item(), "n_tokens": n_tokens,
-                "mean_value": values.mean().item()}
+        head = (copy.deepcopy(self.head.state_dict()), copy.deepcopy(self.head_opt.state_dict()))
+        return {"items": [(t, float(a)) for (t, _), a in zip(turns, adv)], "used": runs, "feats": feats,
+                "returns": returns, "head_before": head, "value_loss": float(((values - returns) ** 2).mean()),
+                "mean_value": float(values.mean())}
 
-    @staticmethod
-    def _args(chunk):
-        return ([st["prompt"] for st, _ in chunk], [st["images"] for st, _ in chunk],
-                [st["token_ids"] for st, _ in chunk])
+    def item_loss(self, turn, adv, lp, old, ref):
+        return grpo_token_loss(lp, old, None, adv=adv, clip=self.cfg.grpo_clip, beta=0.0).sum()
 
-    def propose(self, batch):
-        head = (copy.deepcopy(self.head.state_dict()), copy.deepcopy(self.head_opt.state_dict())) if self.head else None
-        update = super().propose(batch)
-        if update is not None:
-            update.payload["head_before"] = head
-        return update
+    def after_step(self, update, minibatch: list[int]) -> None:
+        feats, returns = update.payload["feats"][minibatch], update.payload["returns"][minibatch]
+        self.head_opt.zero_grad(set_to_none=True)
+        ((self.head(feats).squeeze(-1) - returns) ** 2).mean().backward()
+        self.head_opt.step()
 
     def commit(self, update) -> None:
         super().commit(update)
-        self.head_opt.step()
         save_file({k: v.detach().cpu() for k, v in self.head.state_dict().items()}, self.head_path)
 
     def revert(self, update) -> None:
         super().revert(update)
-        before = update.payload["head_before"]
-        if before is None:                       # the head was born in this update: forget it entirely
-            self.head = self.head_opt = None
-            if os.path.exists(self.head_path):
-                os.remove(self.head_path)
-        else:
-            self.head.load_state_dict(before[0])
-            self.head_opt.load_state_dict(before[1])
-            save_file({k: v.detach().cpu() for k, v in self.head.state_dict().items()}, self.head_path)
+        self.head.load_state_dict(update.payload["head_before"][0])
+        self.head_opt.load_state_dict(update.payload["head_before"][1])
+        save_file({k: v.detach().cpu() for k, v in self.head.state_dict().items()}, self.head_path)

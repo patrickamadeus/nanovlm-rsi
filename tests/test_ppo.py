@@ -11,7 +11,7 @@ from tests.test_rest import _scored
 def setup(tmp_path):
     from models.vlm import Policy
     policy = Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=6))
-    return policy, PPO(policy, LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, ppo_value_lr=0.1))
+    return policy, PPO(policy, LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, ppo_value_lr=0.1, minibatches=1))
 
 
 def test_a_single_attempt_is_enough_signal(setup):
@@ -29,7 +29,7 @@ def test_commit_moves_the_value_toward_the_return_and_revert_undoes_it(setup, tm
     fresh = [_scored(policy, 1.0), _scored(policy, 0.0)]          # sampled after the step, as the loop does
     assert ppo.propose(fresh).payload["mean_value"] > 0.0
     ppo.revert(u)
-    assert ppo.head is None and not (tmp_path / "value_head.safetensors").exists()
+    assert float(ppo.head.weight.abs().sum()) == 0.0 and float(ppo.head.bias.abs().sum()) == 0.0   # back to birth
 
 
 def test_rewarded_completion_becomes_more_likely(setup):

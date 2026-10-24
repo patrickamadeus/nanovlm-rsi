@@ -55,4 +55,4 @@ def test_grpo_ignores_hindsight_copies(tmp_path):
     g.policy, g.cfg = P(), LoopConfig()
     t, batch = _failure()
     copy = Hindsight(LoopConfig()).signal(batch, ENV)[1]
-    assert g.backward([copy, copy]) is None         # only relabelled copies: no attempts, no signal
+    assert g.prepare([copy, copy]) is None          # only relabelled copies: no attempts, no signal

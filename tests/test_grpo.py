@@ -50,7 +50,7 @@ IMG = np.zeros((64, 64, 3), np.uint8)
 def setup(tmp_path):
     from models.vlm import Policy
     policy = Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=6))
-    cfg = LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, grpo_beta=0.0)
+    cfg = LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, grpo_beta=0.0, minibatches=1)
     return policy, GRPO(policy, cfg), cfg
 
 
@@ -117,16 +117,31 @@ def test_commit_persists_and_revert_restores_exactly(setup):
     assert not up.persisted(u)             # what is on disk is the pre-update state again
 
 
-def test_pi_old_is_the_current_policy_when_the_weights_have_not_moved():
-    from rsi.weights import old_logprobs
+def test_commit_takes_one_step_per_minibatch_and_reverts_all_of_them(setup):
+    policy, up, cfg = setup
+    up.cfg.minibatches = 2
+    snap = policy.snapshot()
+    u = up.propose(_batch(policy))
+    assert all(torch.equal(v, snap[n]) for n, v in policy.snapshot().items())   # propose changes nothing
+    up.commit(u)
+    assert u.payload["steps"] == 2 and np.isfinite(u.payload["loss"])
+    up.revert(u)
+    assert all(torch.equal(v, snap[n]) for n, v in policy.snapshot().items())
 
-    class P:
-        version = 3
-    lp_new = torch.tensor([-1.0, -2.0], requires_grad=True)
-    on = old_logprobs(P(), {"policy_version": 3, "logprobs": np.array([-9.0, -9.0])}, lp_new)
-    off = old_logprobs(P(), {"policy_version": 2, "logprobs": np.array([-9.0, -9.0])}, lp_new)
-    assert torch.equal(on, lp_new.detach()) and not on.requires_grad          # ratio exactly 1
-    assert torch.equal(off, torch.tensor([-9.0, -9.0]))                         # stale samples keep their pi_old
+
+def test_pi_old_is_scored_with_the_same_batching_as_the_step(setup):
+    policy, up, cfg = setup
+    batch = _batch(policy)
+    u = up.propose(batch)
+    seen = []
+    real = up.item_loss
+
+    def spy(turn, adv, lp, old, ref):
+        seen.append((lp.detach() - old).abs().max().item())
+        return real(turn, adv, lp, old, ref)
+    up.item_loss = spy
+    up.commit(u)
+    assert max(seen[:len(seen) // up.cfg.minibatches or 1]) < 1e-6         # first step: ratio exactly 1
 
 
 def test_commit_and_revert_move_the_policy_version(setup):

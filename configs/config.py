@@ -72,6 +72,7 @@ class LoopConfig:
     grpo_beta: float = 0.04        # KL-to-init coefficient; 0 disables the reference pass
     grpo_max_grad_norm: float = 1.0
     micro_batch: int = 8           # turns per training forward pass (every weight method)
+    minibatches: int = 4           # optimizer steps per update: ViSkill's 128 episodes / 32 per PPO minibatch
     rest_lr: float = 1e-5          # rsi/rest.py: fine-tuning on its own successes
     ppo_value_lr: float = 1e-3     # rsi/ppo.py: the value head (the policy uses grpo_lr and grpo_clip)
     lora_r: int = 8

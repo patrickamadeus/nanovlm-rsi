@@ -15,19 +15,14 @@ class ReST(WeightMethod):
     def __init__(self, policy, cfg, weights=None):
         super().__init__(policy, cfg, weights, lr=cfg.rest_lr)
 
-    def backward(self, batch: list) -> dict | None:
+    needs_old = False
+
+    def prepare(self, batch: list) -> dict | None:
         wins = [s for s in batch if s.reward >= 1.0 and not s.flags]
-        items = [st for s in wins for st in s.traj.steps if st["token_ids"] and st["action"] is not None]
+        items = [(st, 1.0) for s in wins for st in s.traj.steps if st["token_ids"] and st["action"] is not None]
         if not items:
             return None
-        n_tokens = sum(len(st["token_ids"]) for st in items)
-        total = 0.0
-        for i in range(0, len(items), self.cfg.micro_batch):
-            chunk = items[i:i + self.cfg.micro_batch]
-            lps = self.policy.logprobs_batch([st["prompt"] for st in chunk], [st["images"] for st in chunk],
-                                             [st["token_ids"] for st in chunk])
-            loss = -sum(lp.sum() for lp in lps) / n_tokens
-            loss.backward()
-            total += loss.item()
-        return {"used": wins, "loss": total, "n_tokens": n_tokens,
-                "hindsight": sum(s.origin == "hindsight" for s in wins)}
+        return {"items": items, "used": wins, "hindsight": sum(s.origin == "hindsight" for s in wins)}
+
+    def item_loss(self, turn, coef, lp, old, ref):
+        return -lp.sum()
