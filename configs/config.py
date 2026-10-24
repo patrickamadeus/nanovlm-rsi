@@ -25,7 +25,7 @@ class PolicyConfig:
 @dataclass
 class LoopConfig:
     # what runs: one choice per folder
-    env: str = "static"            # envs/:    "static" | "craftax"
+    env: str = "static"            # envs/:    "static" | "craftax" | "cauldron"
     judge: str = "outcome"         # judges/:  "outcome" | "vlm" | "composite"
     update: str = "grpo"           # rsi/:     "grpo" | "memory"  — exactly one per run
     curriculum: str = "uniform"    # rsi/:     "uniform" | "frontier"
@@ -43,6 +43,10 @@ class LoopConfig:
     env_seed: int = 0              # fixes the frozen held-out set
     static_families: tuple[str, ...] = ("count_objects", "gather_order")
     craftax_budget: int = 64
+    cauldron_repo: str = "patrickamadeus/the_cauldron"
+    cauldron_subset: str = "sample_1pct"      # 17k rows, ~11k checkable tasks; also sample_10pct ... all
+    cauldron_revision: str = "3047119200ebf8c4c7a42fedc591303a2e703d34"   # pinned: seeds are row indices
+    cauldron_sources: tuple[str, ...] = ()    # empty = every source
 
     # evaluation and the gate
     eval_every: int = 5

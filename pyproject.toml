@@ -17,6 +17,7 @@ Homepage = "https://github.com/patrickamadeus/picoRSI"
 
 [project.optional-dependencies]
 craftax = ["jax", "craftax"]
+cauldron = ["pyarrow"]
 eval = ["lmms-eval @ git+https://github.com/EvolvingLMMs-Lab/lmms-eval.git"]
 plot = ["matplotlib"]
 wandb = ["wandb"]
