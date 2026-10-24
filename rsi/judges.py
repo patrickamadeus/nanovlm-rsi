@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from utils.rollout import Trajectory
+from utils.rollout import Trajectory, moves
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ def hack_flags(traj: Trajectory) -> tuple[str, ...]:
     flags = []
     if traj.total_reward > 0 and traj.env_steps == 0:
         flags.append("zero_step_success")            # almost always an env bug, never a skill
-    actions = [s["action"] for s in traj.steps if s.get("action") is not None]
+    actions = moves(traj)
     if len(actions) >= 8 and Counter(actions).most_common(1)[0][1] >= 0.8 * len(actions):
         flags.append("action_loop")
     if traj.parse_fails / max(traj.env_steps, 1) > 0.5:
@@ -44,10 +44,15 @@ def hack_flags(traj: Trajectory) -> tuple[str, ...]:
 
 
 class OutcomeJudge:
-    """Never re-derives success, only reads it from the env."""
+    """Never re-derives success, only reads it from the env. format_reward (VAGEN's) is added per turn whose
+    answer was well formed; success itself is always the env's total_reward."""
+
+    def __init__(self, format_reward: float = 0.0):
+        self.format_reward = format_reward
 
     def score(self, traj: Trajectory) -> ScoredTrajectory:
-        return ScoredTrajectory(traj, traj.total_reward, None, "outcome", 1.0, hack_flags(traj))
+        bonus = self.format_reward * sum(bool(st.get("format_ok")) for st in traj.steps)
+        return ScoredTrajectory(traj, traj.total_reward + bonus, None, "outcome", 1.0, hack_flags(traj))
 
 
 class YesNo:
@@ -75,7 +80,7 @@ class VLMJudge:
 
     def score(self, traj: Trajectory) -> ScoredTrajectory:
         context = traj.steps[0].get("obs_text") if traj.steps else None
-        actions = [s["action"] for s in traj.steps if s.get("action") is not None][-8:]
+        actions = moves(traj)[-8:]
         prompt = (f"An agent was given this task: {context or ' '.join(traj.task.goal)}\n"
                   f"Its actions were: {', '.join(actions) or 'none'}.\n"
                   "The image shows the final state. Did the agent achieve the goal? Answer yes or no.")

@@ -11,6 +11,7 @@
 import argparse
 import os
 import subprocess
+import time
 from dataclasses import asdict, fields, replace
 
 import numpy as np
@@ -38,9 +39,13 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
     log.log_run(cfg_hash=cfg.hash(), git_sha=git_sha(), methods=list(cfg.methods), planner=cfg.planner,
                 update_planner=cfg.update_planner, judge=cfg.judge, env=cfg.env, gate_enabled=cfg.gate_enabled,
                 config=asdict(cfg))
+    if cfg.wandb_project:
+        log.attach_wandb(cfg.wandb_project, os.path.basename(os.path.normpath(cfg.run_dir)), asdict(cfg),
+                         cfg.wandb_entity)
     per_stage, stage = max(cfg.iters // len(stages), 1), None
 
     for it in range(cfg.iters):
+        log.step, t_iter = it, time.perf_counter()
         if stages[min(it // per_stage, len(stages) - 1)] != stage:      # a new stage: new tasks, same agent
             stage = stages[min(it // per_stage, len(stages) - 1)]
             env = envs[stage]
@@ -95,11 +100,36 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
             m.observe(batch)
         planner.observe(batch, results)
         chooser.observe(batch, results)
+        log.log_metrics(**iteration_metrics(trajs, batch, getattr(planner, "last_stats", None) or {}),
+                        **{f"cost/{k}": v for k, v in asdict(log.cumulative_cost).items()},
+                        **{"time/iter_seconds": time.perf_counter() - t_iter})
 
     final = None
     for name, e in envs.items():
         final = evaluate(policy, e, heldout[name], log, cfg, methods=methods, env_name=name, final=True)
+    log.finish()
     return final
+
+
+def iteration_metrics(trajs, batch, planner_stats: dict) -> dict:
+    """What happened this iteration, as numbers: the per-iteration charts."""
+    turns = [st for t in trajs for st in t.steps]
+    groups: dict = {}
+    for t in trajs:
+        groups.setdefault((t.task.family, t.task.seed), []).append(t.total_reward >= 1.0)
+    attempts = [s for s in batch if s.origin == "attempt"]
+    m = {"train/success": float(np.mean([t.total_reward >= 1.0 for t in trajs])) if trajs else 0.0,
+         "train/reward": float(np.mean([s.reward for s in attempts])) if attempts else 0.0,
+         "train/format_ok": float(np.mean([bool(st.get("format_ok")) for st in turns])) if turns else 0.0,
+         "train/parse_fail": float(np.mean([not st.get("actions") for st in turns])) if turns else 0.0,
+         "train/turns": float(np.mean([len(t.steps) for t in trajs])) if trajs else 0.0,
+         "train/env_steps": float(np.mean([t.env_steps for t in trajs])) if trajs else 0.0,
+         "train/actions_per_turn": float(np.mean([len(st.get("actions") or []) for st in turns])) if turns else 0.0,
+         "train/tokens_per_turn": float(np.mean([len(st["token_ids"]) for st in turns])) if turns else 0.0,
+         "train/groups_with_signal": float(np.mean([0 < sum(g) < len(g) for g in groups.values()])) if groups else 0.0,
+         "train/hindsight_copies": float(sum(s.origin == "hindsight" for s in batch))}
+    m.update({f"planner/{k}": v for k, v in planner_stats.items() if isinstance(v, (int, float))})
+    return m
 
 
 def check_run_dir(cfg: LoopConfig) -> None:

@@ -11,13 +11,16 @@ eval_n: 200
 gate_n: 32
 grpo_lr: 3.0e-4                 # picked on FrozenLake: 7.5% -> 37.5% held-out by iteration 10 (1e-4: 33%)
 run_dir: runs/sokoban_grpo
-# skill settings from ViSkill: one card, shown only if close enough; only optimal-length successes are kept
-mem_top_k: 1
-mem_retrieve_alpha: 0.9
-mem_retrieve_min: 0.8
-mem_dedupe_sim: 0.9
-mem_max_excess_steps: 0
+# How the policy answers: VAGEN's free_think format and settings (mll-lab-nu/VAGEN), prompt in prompts/sokoban.txt
+answer_format: answer          # <think>...</think><answer>a1, a2</answer>
+max_actions_per_turn: 3
+max_turns: 5
+format_reward: 0.1
+wandb_project: picorsi
 policy:
-  scaffold_path: utils/scaffold_agent.txt
+  prompt_path: prompts/sokoban.txt
   model_id: Qwen/Qwen2.5-VL-3B-Instruct
-  max_new_tokens: 16
+  response_prefix: ""
+  stop_at_newline: false
+  stop_strings: ["</answer>"]
+  max_new_tokens: 512

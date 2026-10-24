@@ -16,7 +16,8 @@ class PolicyConfig:
     temperature: float = 1.0       # GRPO needs real sampling diversity within a group
     dtype: str = "bfloat16"
     device: str = "auto"           # "auto" picks cuda when available
-    scaffold_path: str = "utils/scaffold.txt"
+    prompt_path: str = "prompts/default.txt"   # prompts/<env>.txt: one per environment, from its baseline
+    stop_strings: tuple[str, ...] = ()        # generation also stops after these, e.g. ("</answer>",)
     image_side: int = 512          # one 512px tile; the processor default turns a 64px frame into 17 tiles
     stop_at_newline: bool = True   # the action is one line; generating past it is wasted compute
     batch_size: int = 64           # act_batch: prompts per generate call
@@ -35,9 +36,18 @@ class LoopConfig:
     iters: int = 20
     tasks_per_iter: int = 4
     group_size: int = 8            # rollouts per task; GRPO advantages are relative within this group
+
+    # how the policy answers (utils/prompt.py)
+    answer_format: str = "act"     # "act": one "ACT: x" line | "answer": VAGEN's <think>...</think><answer>...</answer>
+    max_actions_per_turn: int = 1  # VAGEN: 5 (FrozenLake), 3 (Sokoban)
+    action_sep: str = ","
+    max_turns: int = 0             # policy calls per episode; 0 = one per env step (task.budget)
+    format_reward: float = 0.0     # VAGEN pays this per well-formatted turn: 0.02 (FrozenLake), 0.1 (Sokoban)
     seed: int = 0
     run_dir: str = "runs/dev"
     resume: bool = False           # reusing a non-empty run_dir is refused unless resuming on purpose
+    wandb_project: str = ""        # set to mirror the trace to Weights & Biases (WANDB_API_KEY in the environment)
+    wandb_entity: str = ""
 
     # envs
     env_seed: int = 0              # fixes the frozen held-out set

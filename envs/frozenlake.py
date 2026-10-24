@@ -17,8 +17,8 @@ from envs.base import Env, Obs, SeededTasks, Task, parse_levels, split_for_seed,
 MOVES = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 CELL = 48
 ICE, HOLE, GOAL, AGENT, GRIDLINE = (200, 225, 245), (20, 40, 90), (40, 180, 70), (220, 50, 50), (150, 180, 210)
-RULES = ("You are the red circle on a frozen lake. Reach the green square. "
-         "Dark blue squares are holes: stepping into one ends the game.")
+# The rules are in prompts/frozenlake.txt (VAGEN's); this says how *our* drawing shows them, since it is not gym's art.
+LEGEND = "In the image: the red circle is you, dark blue squares are holes, the green square is the goal."
 
 
 def _cell(text: str) -> tuple[int, int]:
@@ -108,7 +108,7 @@ class FrozenLakeEnv(SeededTasks, Env):
 
     def _obs(self) -> Obs:
         return Obs(render(self._size, self._holes, self._goal, self._agent),
-                   f"{RULES} Step {self._t} of {self._task.budget}.")
+                   f"{LEGEND} Step {self._t} of {self._task.budget}.")
 
     def edit(self, task: Task, rng: np.random.Generator) -> Task | None:
         """ACCEL's editor: one step bigger or smaller, one hole more or fewer, on a fresh train layout."""

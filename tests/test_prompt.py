@@ -27,11 +27,11 @@ def test_validate_scaffold_requires_all_slots():
 
 
 def test_shipped_scaffold_is_valid():
-    validate_scaffold(load_scaffold("utils/scaffold.txt"))
+    validate_scaffold(load_scaffold("prompts/default.txt"))
 
 
 def test_render_fills_slots_and_empty_memory_is_clean():
-    out = render(load_scaffold("utils/scaffold.txt"),
+    out = render(load_scaffold("prompts/default.txt"),
                  system="S", actions=["a", "b"], memory="", task="T")
     assert "S" in out and "a, b" in out and "T" in out
     assert "{" not in out and "\n\n\n" not in out
@@ -39,7 +39,7 @@ def test_render_fills_slots_and_empty_memory_is_clean():
 
 def test_shipped_scaffold_loads_from_any_working_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    validate_scaffold(load_scaffold("utils/scaffold.txt"))
+    validate_scaffold(load_scaffold("prompts/default.txt"))
 
 
 def test_parse_forgives_case_and_wrapping_but_not_prose():

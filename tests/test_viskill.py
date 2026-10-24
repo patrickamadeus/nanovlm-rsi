@@ -96,7 +96,8 @@ def test_signal_adds_progress_reward_to_failures_that_had_a_skill(vs):
     ref = list(m.store.skills()[0].actions) if len(m.store) == 1 else ENV.solve(tasks[0])
     fail, _ = play([tasks[0]], [ref[:-1] + ["up"] * 20], [ctx])       # follows the card, then wanders off
     assert fail[0].reward == 0.0
-    acts = [st["action"] for st in fail[0].traj.steps if st["action"]]
+    from utils.rollout import moves
+    acts = moves(fail[0].traj)
     card = next(s for s in m.store.skills() if s.id == ctx.ids[0])
     assert m.signal(fail, ENV)[0].reward == pytest.approx(0.8 * skill_reward(acts, list(card.actions)))
     no_ctx, _ = play([tasks[0]], [ref[:-1] + ["up"] * 20])

@@ -20,7 +20,7 @@ def test_smoke_closes_the_loop_with_a_scripted_policy(tmp_path):
     result = train(small(tmp_path), policy=ScriptedPolicy(cycle(["ACT: 3", "ACT: pick"])))
     assert isinstance(result, EvalResult)
     kinds = {r["kind"] for r in Trace(str(tmp_path)).records()}
-    assert kinds == {"run", "rollout", "update", "eval"}
+    assert kinds == {"run", "rollout", "update", "eval", "metrics"}
 
 
 def test_memory_update_commits_a_skill_when_rollouts_succeed(tmp_path):

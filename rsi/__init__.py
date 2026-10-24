@@ -97,7 +97,7 @@ def make_judge(cfg, env=None, families: set | None = None):
     """families: the task families whose reward is ground truth (every stage's, in a lifelong run)."""
     from rsi.judges import CompositeJudge, OutcomeJudge, VLMJudge, YesNo
     if cfg.judge == "outcome":
-        return OutcomeJudge()
+        return OutcomeJudge(cfg.format_reward)
     if cfg.judge in ("vlm", "composite"):
         from configs.config import PolicyConfig
         p = cfg.policy
@@ -105,5 +105,5 @@ def make_judge(cfg, env=None, families: set | None = None):
         if cfg.judge == "vlm":
             return vlm
         native = families if families is not None else getattr(env, "families", set())
-        return CompositeJudge(OutcomeJudge(), vlm, native, cfg.judge_sample_rate, cfg.seed)
+        return CompositeJudge(OutcomeJudge(cfg.format_reward), vlm, native, cfg.judge_sample_rate, cfg.seed)
     raise ValueError(f"unknown judge {cfg.judge!r}")

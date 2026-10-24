@@ -157,14 +157,14 @@ class Policy:
         batch = {k: (v.to(self.device, self.model.dtype) if v.is_floating_point() else v.to(self.device))
                  for k, v in batch.items()}
         n_prompt = batch["input_ids"].shape[1]
-        seqs = self.model.generate(**batch, **self._sampling(greedy), max_new_tokens=self.cfg.max_new_tokens,
-                                   eos_token_id=self.stop_ids, suppress_tokens=self.never,
-                                   pad_token_id=tok.pad_token_id)[:, n_prompt:].tolist()
+        seqs = self.model.generate(**batch, **self._sampling(greedy), **self._stops(),
+                                   max_new_tokens=self.cfg.max_new_tokens, eos_token_id=self.stop_ids,
+                                   suppress_tokens=self.never, pad_token_id=tok.pad_token_id)[:, n_prompt:].tolist()
         prefix = self.cfg.response_prefix if prefix is None else prefix
         completions = []
         for ids in seqs:
             stop = next((j for j, t in enumerate(ids) if t in self.stop_ids), None)
-            completions.append(ids[:stop + 1] if stop is not None else ids)
+            completions.append(self._trim(ids[:stop + 1] if stop is not None else ids))
         lps = self._score_batch(batch, completions)
         n_real = batch["attention_mask"].sum(1).tolist()
         self.tokens += int(sum(n_real)) + sum(map(len, completions))
@@ -204,6 +204,28 @@ class Policy:
                 feats.append(result.hidden_states[-1][i, n - 1].detach().float())
         return (out, torch.stack(feats)) if hidden else out
 
+    def _stops(self) -> dict:
+        return {"stop_strings": list(self.cfg.stop_strings), "tokenizer": self.processor.tokenizer} \
+            if self.cfg.stop_strings else {}
+
+    def _trim(self, ids: list[int]) -> list[int]:
+        """Cut just after the first stop string: a row in a batch keeps generating (padding) after it stops,
+        and the scored completion must end where the answer ended. Binary search on the decoded prefix."""
+        tok = self.processor.tokenizer
+        text = tok.decode(ids, skip_special_tokens=True)
+        hits = [s for s in self.cfg.stop_strings if s in text]
+        if not hits:
+            return ids
+        first = min(hits, key=text.index)
+        lo, hi = 1, len(ids)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if first in tok.decode(ids[:mid], skip_special_tokens=True):
+                hi = mid
+            else:
+                lo = mid + 1
+        return ids[:lo]
+
     def _sampling(self, greedy: bool) -> dict:
         # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T)
         return (dict(do_sample=False) if greedy else
@@ -216,10 +238,10 @@ class Policy:
         benchmarks, where we measure the policy rather than draw from it (logprobs are then not pi_old)."""
         inputs = self._inputs(prompt, images, prefix=prefix)
         n_prompt = inputs["input_ids"].shape[1]
-        out = self.model.generate(**inputs, **self._sampling(greedy), max_new_tokens=self.cfg.max_new_tokens,
+        out = self.model.generate(**inputs, **self._sampling(greedy), **self._stops(), max_new_tokens=self.cfg.max_new_tokens,
                                   eos_token_id=self.stop_ids, suppress_tokens=self.never, return_dict_in_generate=True,
                                   pad_token_id=self.processor.tokenizer.pad_token_id)
-        ids = out.sequences[0, n_prompt:].tolist()
+        ids = self._trim(out.sequences[0, n_prompt:].tolist())
         # Re-score with one full forward pass rather than trusting the decode-time logits: in bf16 the
         # KV-cache decode drifts from a full pass by up to ~0.27 nats, which would put GRPO ratios
         # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.

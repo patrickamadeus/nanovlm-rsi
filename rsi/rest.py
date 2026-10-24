@@ -19,7 +19,8 @@ class ReST(WeightMethod):
 
     def prepare(self, batch: list) -> dict | None:
         wins = [s for s in batch if s.reward >= 1.0 and not s.flags]
-        items = [(st, 1.0) for s in wins for st in s.traj.steps if st["token_ids"] and st["action"] is not None]
+        items = [(st, 1.0) for s in wins for st in s.traj.steps
+                 if st["token_ids"] and (st.get("actions") or st.get("action"))]
         if not items:
             return None
         return {"items": items, "used": wins, "hindsight": sum(s.origin == "hindsight" for s in wins)}

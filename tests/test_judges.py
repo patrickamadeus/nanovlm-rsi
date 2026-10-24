@@ -43,3 +43,12 @@ def test_flags_noop_spam_from_parse_fails():
 def test_unknown_judge_is_rejected():
     with pytest.raises(ValueError):
         make_judge(LoopConfig(judge="oracle"))
+
+
+def test_outcome_judge_adds_vagens_per_turn_format_reward():
+    from rsi.judges import OutcomeJudge
+    steps = [{"actions": ["up"], "format_ok": True}, {"actions": ["up"], "format_ok": False},
+             {"actions": ["up"], "format_ok": True}]
+    t = Trajectory(TASK, steps, 1.0, 3, 0, 3)
+    assert OutcomeJudge(format_reward=0.1).score(t).reward == pytest.approx(1.2)
+    assert OutcomeJudge().score(t).reward == 1.0

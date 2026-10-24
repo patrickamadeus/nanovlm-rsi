@@ -30,7 +30,7 @@ def main():
         policy = make_policy(cfg.policy)
     env = make_env(cfg)
     task = env.tasks(args.split, args.index + 1, np.random.default_rng(cfg.seed))[args.index]
-    template = load_scaffold(cfg.policy.scaffold_path)
+    template = load_scaffold(cfg.policy.prompt_path)
     obs = env.reset(task)
     print(f"task {task.family} seed={task.seed} goal={task.goal} budget={task.budget}\n")
     for t in range(task.budget):

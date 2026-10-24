@@ -18,8 +18,9 @@ MOVES = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
 CELL = 48
 WALL, MORTAR, FLOOR = (110, 110, 110), (70, 70, 70), (35, 35, 35)
 TARGET, BOX, BOX_DONE, PLAYER = (220, 50, 50), (190, 140, 60), (60, 180, 80), (60, 120, 230)
-RULES = ("You are the blue circle. Push every brown box onto a red-outlined target. You can push a box "
-         "but never pull it, and a box pushed into a corner can never move again.")
+# The rules are in prompts/sokoban.txt (VAGEN's); this says how *our* drawing shows them, since it is not gym's art.
+LEGEND = ("In the image: the blue circle is you, brown squares with an X are boxes, red outlines are targets, "
+          "a green box is on its target, grey bricks are walls.")
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,7 @@ class SokobanEnv(SeededTasks, Env):
     def _obs(self) -> Obs:
         w = self._world
         return Obs(render(self._task.level[0], w.walls, w.targets, self._boxes, self._player),
-                   f"{RULES} Step {self._t} of {self._task.budget}.")
+                   f"{LEGEND} Step {self._t} of {self._task.budget}.")
 
     def edit(self, task: Task, rng: np.random.Generator) -> Task | None:
         """ACCEL's editor: one step bigger or smaller, one box more or fewer, on a fresh train layout."""

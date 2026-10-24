@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from rsi.memory import Memory
-from utils.rollout import Context
+from utils.rollout import Context, moves
 
 THUMB, PATH, LABEL_H = 112, (250, 210, 40), 18
 
@@ -44,20 +44,22 @@ def _font(size: int):
 
 
 def render_card(traj, strategy: str = "", cell_px: int | None = None) -> np.ndarray:
-    """[overview with path | frame grid], strategy underneath. Frames are the observation before each move
-    plus the final one, labelled "1 down", "2 right", ..., "goal"."""
-    moves = [st for st in traj.steps if st["action"] is not None]
-    frames = [st["images"][-1] for st in moves] + [traj.final_rgb]
-    labels = [f"{i + 1} {st['action']}" for i, st in enumerate(moves)] + ["goal"]
+    """[overview with path | frame grid], strategy underneath. Frames are the observation before each turn
+    plus the final one, labelled with the turn's moves ("1 down", "2 right,right", ..., "goal")."""
+    turns = [st for st in traj.steps if _acts(st)]
+    frames = [st["images"][-1] for st in turns] + [traj.final_rgb]
+    labels = [f"{i + 1} {','.join(_acts(st))}" for i, st in enumerate(turns)] + ["goal"]
     if len(frames) > 8:                     # keep the first, the last, and evenly spaced ones between
         keep = np.linspace(0, len(frames) - 1, 8).round().astype(int)
         frames, labels = [frames[i] for i in keep], [labels[i] for i in keep]
     overview = Image.fromarray(frames[0]).convert("RGB")
     draw = ImageDraw.Draw(overview)
-    if cell_px and all(st.get("pos") for st in moves):
+    acts = [a for st in turns for a in _acts(st)]
+    cells = [p for st in turns for p in (st.get("path") or ([st["pos"]] if st.get("pos") else []))]
+    if cell_px and cells and len(cells) == len(acts) and all(cells):
         start = traj.steps[0]["images"][-1]
-        points = [_start_pos(moves, cell_px, start)] + [(c * cell_px + cell_px // 2, r * cell_px + cell_px // 2)
-                                                        for r, c in (st["pos"] for st in moves)]
+        points = [_start_pos(acts[0], cells[0], cell_px, start)] + [
+            (c * cell_px + cell_px // 2, r * cell_px + cell_px // 2) for r, c in cells]
         draw.line(points, fill=PATH, width=max(cell_px // 8, 3))
         x, y = points[-1]
         draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=PATH)
@@ -79,11 +81,15 @@ def render_card(traj, strategy: str = "", cell_px: int | None = None) -> np.ndar
     return np.asarray(card)
 
 
-def _start_pos(moves, cell_px, frame):
+def _acts(st) -> list[str]:
+    return st.get("actions") or ([st["action"]] if st.get("action") else [])
+
+
+def _start_pos(first_action, first_cell, cell_px, frame):
     """Where the path starts: the cell the first move left, recovered from the first recorded position."""
     from envs.frozenlake import MOVES
-    r, c = moves[0]["pos"]
-    dr, dc = MOVES.get(moves[0]["action"], (0, 0))
+    r, c = first_cell
+    dr, dc = MOVES.get(first_action, (0, 0))
     pr, pc = r - dr, c - dc
     if not (0 <= pr * cell_px < frame.shape[0] and 0 <= pc * cell_px < frame.shape[1]):
         pr, pc = r, c                       # the first move was blocked by the edge
@@ -163,7 +169,7 @@ class ViSkill(Memory):
         for s in batch:
             ref = next((by_id[i] for i in s.traj.context_ids if i in by_id), None)
             if s.reward < 1.0 and ref is not None:
-                acts = [st["action"] for st in s.traj.steps if st["action"] is not None]
+                acts = moves(s.traj)
                 s = replace(s, reward=s.reward + lam * skill_reward(acts, list(ref.actions)))
             out.append(s)
         return out

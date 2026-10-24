@@ -60,6 +60,8 @@ def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *
                      if r.get("split") == "train"}
     with paired_randomness(cfg.seed + 1):     # every held-out point of a run, and every run, sees the same draws
         trajs = run_tasks(policy, env, tasks, log, cfg, methods)
+    if trajs:
+        log.log_sample(env_name or cfg.env, trajs[0])
     won = [float(t.total_reward >= 1.0) for t in trajs]
     seen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) in trained_goals]
     unseen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) not in trained_goals]

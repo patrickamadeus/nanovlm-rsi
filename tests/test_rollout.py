@@ -21,13 +21,13 @@ def test_rollout_records_one_step_per_action():
 def test_parse_failure_becomes_noop_with_negative_shaping():
     tr = rollout(ScriptedPolicy(["no action here"]), env, gather_task, cfg)
     assert tr.parse_fails >= 1
-    assert tr.steps[0]["action"] is None
+    assert tr.steps[0]["actions"] == []
     assert tr.steps[0]["shaping"] < 0
 
 
 def test_illegal_action_counts_as_parse_failure():
     tr = rollout(ScriptedPolicy(["ACT: teleport"]), env, gather_task, cfg)
-    assert tr.parse_fails >= 1 and tr.steps[0]["action"] is None
+    assert tr.parse_fails >= 1 and tr.steps[0]["actions"] == []
 
 
 def test_rollout_never_exceeds_task_budget():

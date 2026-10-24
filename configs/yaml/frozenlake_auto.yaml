@@ -15,13 +15,16 @@ grpo_lr: 3.0e-4                 # picked on FrozenLake: 7.5% -> 37.5% held-out b
 rest_lr: 1.0e-4                 # ReST on LoRA; the 1e-5 default is for full fine-tuning scale
 run_dir: runs/frozenlake_auto
 gate_enabled: false
-# skill settings from ViSkill: one card, shown only if close enough; only optimal-length successes are kept
-mem_top_k: 1
-mem_retrieve_alpha: 0.9
-mem_retrieve_min: 0.8
-mem_dedupe_sim: 0.9
-mem_max_excess_steps: 2         # ViSkill keeps only optimal successes (0); 2 lets hindsight copies in
+# How the policy answers: VAGEN's free_think format and settings (mll-lab-nu/VAGEN), prompt in prompts/frozenlake.txt
+answer_format: answer          # <think>...</think><answer>a1, a2</answer>
+max_actions_per_turn: 5
+max_turns: 5
+format_reward: 0.02
+wandb_project: picorsi
 policy:
-  scaffold_path: utils/scaffold_agent.txt
+  prompt_path: prompts/frozenlake.txt
   model_id: Qwen/Qwen2.5-VL-3B-Instruct
-  max_new_tokens: 16
+  response_prefix: ""
+  stop_at_newline: false
+  stop_strings: ["</answer>"]
+  max_new_tokens: 512

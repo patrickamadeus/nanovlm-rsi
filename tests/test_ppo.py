@@ -29,7 +29,7 @@ def test_commit_moves_the_value_toward_the_return_and_revert_undoes_it(setup, tm
     fresh = [_scored(policy, 1.0), _scored(policy, 0.0)]          # sampled after the step, as the loop does
     assert ppo.propose(fresh).payload["mean_value"] > 0.0
     ppo.revert(u)
-    assert float(ppo.head.weight.abs().sum()) == 0.0 and float(ppo.head.bias.abs().sum()) == 0.0   # back to birth
+    assert float(ppo.head.weight.detach().abs().sum()) == 0.0 and float(ppo.head.bias.detach().abs().sum()) == 0.0
 
 
 def test_rewarded_completion_becomes_more_likely(setup):

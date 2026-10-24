@@ -165,3 +165,15 @@ def test_logprobs_batch_matches_one_at_a_time_and_carries_gradients(tiny):
         assert tiny.logprobs_batch(prompts[:1], images[:1], ids[:1])[0].requires_grad
     finally:
         p.requires_grad_(False)
+
+
+def test_completions_are_cut_right_after_a_stop_string(tiny):
+    tok = tiny.processor.tokenizer
+    ids = tok("<think>go</think><answer>Up</answer> and then more", add_special_tokens=False).input_ids
+    tiny.cfg.stop_strings = ("</answer>",)
+    try:
+        cut = tiny._trim(ids)
+    finally:
+        tiny.cfg.stop_strings = ()
+    assert tok.decode(cut).endswith("</answer>") and "more" not in tok.decode(cut)
+    assert tiny._trim(ids) == ids                        # no stop strings configured: untouched

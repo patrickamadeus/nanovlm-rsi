@@ -26,6 +26,7 @@ from rsi.base import Method
 from rsi.gate import Update
 from utils.log import Cost, heal_tail
 from utils.rollout import Context
+from utils.rollout import moves as executed
 
 FORMATS = ("action", "text", "text+action", "visual", "text+visual")
 
@@ -227,7 +228,7 @@ class Memory(Method):
         """The policy's own sentence about why this attempt worked (ViSkill's d_k), for the text formats."""
         if "text" not in self.fmt or self.policy is None:
             return ""
-        moves = ", ".join(st["action"] for st in s.traj.steps if st["action"] is not None)
+        moves = ", ".join(executed(s.traj))
         first = s.traj.steps[0]["images"][-1:] if s.traj.steps and s.traj.steps[0].get("images") else []
         out = self.policy.act(STRATEGY_PROMPT.format(moves=moves), list(first), prefix="Strategy:")
         return clean(out.text.removeprefix("Strategy:"))
@@ -235,7 +236,7 @@ class Memory(Method):
     def skill_record(self, s) -> dict:
         key = self.key(s.traj.task, self.env) if self.env is not None else situation(s)
         return {"family": s.traj.task.family, "situation": situation(s),
-                "actions": [st["action"] for st in s.traj.steps if st["action"] is not None], "reward": s.reward,
+                "actions": executed(s.traj), "reward": s.reward,
                 "key": key.tolist() if isinstance(key, np.ndarray) else None, "strategy": self.strategy(s)}
 
     def propose(self, batch) -> Update | None:

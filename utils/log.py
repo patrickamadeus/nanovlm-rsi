@@ -1,7 +1,9 @@
-"""The run log: one append-only JSONL file of run, rollout, update and eval records.
+"""The run log: one append-only JSONL file of run, rollout, update, eval and per-iteration metrics records.
 
-A run should be attributable from this file alone — carrier, gate outcomes and
-cumulative cost are all here, so reading results never requires reading code.
+A run should be attributable from this file alone — methods, gate outcomes and cumulative cost are all
+here, so reading results never requires reading code. With cfg.wandb_project set, the same numbers are
+mirrored to Weights & Biases (metrics, eval, update records, and a sample held-out episode per eval):
+the trace stays the record of truth, W&B is the view.
 """
 import json
 import os
@@ -42,6 +44,7 @@ class Trace:
         self.run_id = run_id or uuid.uuid4().hex[:8]   # every record says which run wrote it
         open(self.path, "a").close()
         heal_tail(self.path)
+        self.wb, self.step = None, 0          # W&B run when attached; the iteration charts are keyed by
         self._cost = Cost()
         for rec in self.records():
             if rec.get("kind") in ("rollout", "cost"):
@@ -52,8 +55,39 @@ class Trace:
         with open(self.path, "a") as f:
             f.write(json.dumps(rec, default=_jsonable) + "\n")
 
+    def attach_wandb(self, project: str, name: str, config: dict, entity: str = "") -> None:
+        import wandb
+        self.wb = wandb
+        wandb.init(project=project, entity=entity or None, name=name, config=config, dir=os.path.dirname(self.path))
+
+    def _chart(self, data: dict) -> None:
+        if self.wb is not None and data:
+            self.wb.log(data, step=self.step)
+
     def log_run(self, **fields) -> None:
         self._write("run", fields)
+
+    def log_metrics(self, **fields) -> None:
+        """One record per iteration: what the charts show."""
+        self._write("metrics", {"iter": self.step, **fields})
+        self._chart({k: v for k, v in fields.items() if isinstance(v, (int, float))})
+
+    def log_sample(self, env_name: str, traj) -> None:
+        """One held-out episode on W&B: its frames, and what the policy wrote each turn."""
+        if self.wb is None or not traj.steps:
+            return
+        import numpy as np
+        frames = [st["images"][-1] for st in traj.steps][:7] + [traj.final_rgb]
+        h = min(f.shape[0] for f in frames)
+        strip = np.concatenate([f[:h] for f in frames], axis=1)
+        turns = "".join(f"<p><b>turn {i + 1}</b> {', '.join(st.get('actions') or []) or 'no valid action'}<br>"
+                        f"<code>{_escape(st.get('text', ''))}</code></p>" for i, st in enumerate(traj.steps))
+        self._chart({f"sample/{env_name}/frames": self.wb.Image(strip, caption=f"reward {traj.total_reward}"),
+                     f"sample/{env_name}/turns": self.wb.Html(turns)})
+
+    def finish(self) -> None:
+        if self.wb is not None:
+            self.wb.finish()
 
     def log_rollout(self, **fields) -> None:
         # every env step and token, including eval rollouts, is cost: matched-cost comparison depends on it
@@ -67,9 +101,21 @@ class Trace:
 
     def log_update(self, **fields) -> None:
         self._write("update", fields)
+        m = fields.get("method")
+        if m and "mode" in fields:
+            nums = {k: v for k, v in fields.items() if isinstance(v, (int, float)) and k not in ("iter",)}
+            nums["committed"] = float(bool(fields.get("committed")))
+            self._chart({f"update/{m}/{k}": v for k, v in nums.items()})
 
     def log_eval(self, **fields) -> None:
         self._write("eval", fields)
+        env = fields.get("env", "env")
+        data = {f"eval/{env}/{k}": fields[k] for k in ("success_rate", "parse_fail_rate", "unseen_goal_rate")
+                if k in fields}
+        data = {k.replace("success_rate", "success").replace("parse_fail_rate", "parse_fail")
+                .replace("unseen_goal_rate", "unseen_goal"): v for k, v in data.items()}
+        data.update({f"eval/{env}/by_key/{k}": v for k, v in (fields.get("by_key") or {}).items()})
+        self._chart(data)
 
     @property
     def cumulative_cost(self) -> Cost:
@@ -101,6 +147,10 @@ class Trace:
         """None means never attempted — distinct from always failed, which the curriculum needs to tell apart."""
         wins, n = self.success_table().get((family, tuple(goal)), (0, 0))
         return wins / n if n else None
+
+
+def _escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _jsonable(x):

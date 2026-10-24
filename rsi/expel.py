@@ -16,6 +16,7 @@ from rsi.memory import Memory, SkillStore, clean
 from rsi.gate import Update
 from utils.log import Cost
 from utils.rollout import Context
+from utils.rollout import moves as executed
 
 PAIR_PROMPT = ("Two attempts at the same level.\n"
                "Succeeded with: {win}.\n"
@@ -25,7 +26,7 @@ GLOBAL = np.ones(1, np.float32)        # rules are not retrieved by similarity: 
 
 
 def moves(s) -> str:
-    return ", ".join(st["action"] for st in s.traj.steps if st["action"] is not None) or "no valid moves"
+    return ", ".join(executed(s.traj)) or "no valid moves"
 
 
 def ending(s) -> str:
@@ -59,7 +60,7 @@ class ExpeL(Memory):
         rules, used = [], []
         for group in groups.values():
             wins = [s for s in group if s.reward >= 1.0]
-            fails = [s for s in group if s.reward < 1.0 and any(st["action"] for st in s.traj.steps)]
+            fails = [s for s in group if s.reward < 1.0 and executed(s.traj)]
             if not wins or not fails:
                 continue
             win, lose = min(wins, key=lambda s: s.traj.env_steps), fails[0]

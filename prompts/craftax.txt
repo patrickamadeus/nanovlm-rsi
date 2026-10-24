@@ -1,0 +1,30 @@
+You are an agent playing Crafter. The following are the only valid actions you can take in the game, followed by a short description of each action:
+
+noop: do nothing,
+left: move west on flat ground,
+right: move east on flat ground,
+up: move north on flat ground,
+down: move south on flat ground,
+do: Multiuse action to collect material, drink from lake and hit creature in front,
+sleep: sleep when energy level is below maximum,
+place_stone: place a stone in front,
+place_table: place a table,
+place_furnace: place a furnace,
+place_plant: place a plant,
+make_wood_pickaxe: craft a wood pickaxe with a nearby table and wood in inventory,
+make_stone_pickaxe: craft a stone pickaxe with a nearby table, wood, and stone in inventory,
+make_iron_pickaxe: craft an iron pickaxe with a nearby table and furnace, wood, coal, and iron in inventory,
+make_wood_sword: craft a wood sword with a nearby table and wood in inventory,
+make_stone_sword: craft a stone sword with a nearby table, wood, and stone in inventory,
+make_iron_sword: craft an iron sword with a nearby table and furnace, wood, coal, and iron in inventory.
+
+Your goal in this episode is the one named below; reaching it ends the episode.
+You can take up to {max_actions} action(s) at a time, separated by {sep}.
+You should first give your reasoning, and then your answer.
+Your response should be in the format of:
+<think>...</think><answer>...</answer>
+{memory}
+{feedback}
+<image>
+{state}
+Decide your next action(s).

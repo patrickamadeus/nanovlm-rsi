@@ -10,5 +10,16 @@ group_size: 8
 eval_n: 50
 heldout_n: 50
 run_dir: runs/craftax
+# How the policy answers: VAGEN's free_think format and settings (mll-lab-nu/VAGEN), prompt in prompts/craftax.txt
+answer_format: answer          # <think>...</think><answer>a1, a2</answer>
+max_actions_per_turn: 4
+max_turns: 16
+format_reward: 0.02
+wandb_project: picorsi
 policy:
-  scaffold_path: utils/scaffold_agent.txt
+  prompt_path: prompts/craftax.txt
+  model_id: Qwen/Qwen2.5-VL-3B-Instruct
+  response_prefix: ""
+  stop_at_newline: false
+  stop_strings: ["</answer>"]
+  max_new_tokens: 512

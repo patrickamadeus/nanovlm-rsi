@@ -102,7 +102,7 @@ class WeightMethod(Method):
                         old.update(zip(idx, self.score(items, idx)))
                     if self.uses_ref and self.cfg.grpo_beta > 0:
                         ref.update(zip(idx, self.score(items, idx, ref=True)))
-        losses, norms = [], []
+        losses, norms, kls, clipped, n_seen = [], [], 0.0, 0.0, 0
         for mb in plan:
             self.opt.zero_grad(set_to_none=True)
             n_tok = sum(len(items[i][0]["token_ids"]) for idx in mb for i in idx)
@@ -111,6 +111,13 @@ class WeightMethod(Method):
                 lps = self.score(items, idx)
                 loss = sum(self.item_loss(items[i][0], items[i][1], lp, old.get(i), ref.get(i))
                            for i, lp in zip(idx, lps)) / n_tok
+                with torch.no_grad():        # how far each minibatch's policy has moved from pi_old
+                    for i, lp in zip(idx, lps):
+                        if i in old:
+                            d = (old[i] - lp).float()
+                            kls += float(d.sum())
+                            clipped += float(((torch.exp(-d) - 1).abs() > self.cfg.grpo_clip).sum())
+                            n_seen += d.numel()
                 loss.backward()
                 total += loss.item()
             norms.append(torch.nn.utils.clip_grad_norm_(self.params, self.cfg.grpo_max_grad_norm).item())
@@ -120,7 +127,8 @@ class WeightMethod(Method):
         self.opt.zero_grad(set_to_none=True)
         self.policy.version += 1
         self.weights.save()
-        update.payload.update(loss=float(np.mean(losses)), grad_norm=float(np.mean(norms)), steps=len(plan))
+        update.payload.update(loss=float(np.mean(losses)), grad_norm=float(np.mean(norms)), steps=len(plan),
+                              kl=kls / max(n_seen, 1), clip_frac=clipped / max(n_seen, 1))
 
     def revert(self, update: Update) -> None:
         self.policy.restore(update.payload["snapshot"])
