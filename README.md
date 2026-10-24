@@ -36,7 +36,8 @@ current model's own attempt — but it does not yet plan: it never writes tasks 
 ## Layout
 
 ```
-train.py        the loop, top to bottom — read this first
+picoRSI.ipynb   the whole loop in one standalone notebook (~150 lines) — start here
+train.py        the loop, top to bottom, with every part plugged in
 evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
 generate.py     watch the policy act on one task, step by step
 configs/        config.py (every knob) + yaml/ (one file per experiment)
