@@ -18,6 +18,7 @@ max_actions_per_turn: 3
 max_turns: 5
 format_reward: 0.1
 wandb_project: picorsi
+micro_batch: 2                 # reasoning makes each turn ~5x longer: 8 per forward needed ~25 GB
 policy:
   prompt_path: prompts/sokoban.txt
   model_id: Qwen/Qwen2.5-VL-3B-Instruct
@@ -25,3 +26,4 @@ policy:
   stop_at_newline: false
   stop_strings: ["</answer>"]
   max_new_tokens: 512
+  batch_size: 32                 # generation batch, for the same reason
