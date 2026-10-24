@@ -13,10 +13,18 @@ no framework owning the control flow.
 
 ## How one iteration works
 
-```
-curriculum ──► tasks ──► rollout ──► judge ──► update ──► gate ──► keep / revert
-(what to       (train    (policy     (reward   (GRPO step  (better on the gate
- practise)      split)    answers)    per try)  or memory)  split? keep, else undo)
+```mermaid
+flowchart LR
+    pool[("train split<br/>task pool")] -->|"curriculum picks"| tasks["tasks for<br/>this iteration"]
+    tasks --> rollout["rollout<br/>a group of attempts<br/>per task"]
+    policy(["policy<br/>SmolVLM + LoRA / memory"]) -->|"answers with<br/>current weights"| rollout
+    rollout --> judge["judge (verifier)<br/>reward per attempt"]
+    judge --> update["update<br/>GRPO step or<br/>new skills"]
+    update --> gate{"gate<br/>worse on the<br/>gate split?"}
+    gate -->|"no: keep"| policy
+    gate -->|"yes: undo exactly"| policy
+    held[("held-out split")] -.->|"every N iterations,<br/>report only"| report["held-out success<br/>+ MMStar (lmms-eval)"]
+    policy -.-> report
 ```
 
 | Term | What it is | Where |
