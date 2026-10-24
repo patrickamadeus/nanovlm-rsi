@@ -47,7 +47,7 @@ def contexts_for(methods, env: Env, tasks: list[Task]) -> list:
 def run_tasks(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, methods=(), **fields) -> list:
     """Roll out each task once in one lockstep batch, read-only on every method, logging every rollout as cost."""
     contexts, secs = timed(contexts_for, methods, env, tasks)
-    trajs = rollout_group(policy, env, tasks, cfg, contexts)
+    trajs = rollout_group(policy, env, tasks, cfg, contexts, greedy=cfg.eval_greedy)
     for traj in trajs:
         log.log_rollout(**rollout_record(traj, extra_seconds=secs / max(len(trajs), 1), key=env.task_key(traj.task)),
                         **fields)

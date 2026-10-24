@@ -90,3 +90,18 @@ def test_gate_evaluations_are_paired_and_leave_training_randomness_alone(trace):
     assert draws == first                                   # before and after an update see the same draws
     torch.manual_seed(123)
     assert torch.rand(1).item() == after_eval               # and the training stream continues untouched
+
+
+def test_gate_and_heldout_evaluation_decode_greedily_by_default(trace):
+    calls = []
+
+    class Spy(ScriptedPolicy):
+        def act_batch(self, prompts, images, **kw):
+            calls.append(kw.get("greedy"))
+            return [self.act(p, im) for p, im in zip(prompts, images)]
+
+    make_eval_fn(Spy(iter(lambda: "ACT: 3", None)), env, trace, LoopConfig())(GOAL3)
+    evaluate(Spy(iter(lambda: "ACT: 3", None)), env, GOAL3, trace, LoopConfig())
+    assert calls == [True, True]
+    make_eval_fn(Spy(iter(lambda: "ACT: 3", None)), env, trace, LoopConfig(eval_greedy=False))(GOAL3)
+    assert calls[-1] is False

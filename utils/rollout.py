@@ -47,15 +47,15 @@ class Context:
     ids: tuple[str, ...] = ()
 
 
-def act_all(policy, prompts: list[str], images: list[list[np.ndarray]]):
+def act_all(policy, prompts: list[str], images: list[list[np.ndarray]], greedy: bool = False):
     """One batched call when the policy has one (models/vlm.py), else one call per prompt (test doubles)."""
     if hasattr(policy, "act_batch"):
-        return policy.act_batch(prompts, images)
+        return policy.act_batch(prompts, images, greedy=greedy)
     return [policy.act(p, im) for p, im in zip(prompts, images)]
 
 
 def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
-                  contexts: list[Context] | None = None) -> list[Trajectory]:
+                  contexts: list[Context] | None = None, greedy: bool = False) -> list[Trajectory]:
     """Run one episode per task in lockstep: every turn, one batched policy call for all unfinished rows.
     Each row has its own fork of the env. A row leaves the batch when its episode ends."""
     t_start = time.perf_counter()
@@ -74,7 +74,7 @@ def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
         prompts = [render(template, system=SYSTEM, actions=r["env"].actions, memory=r["ctx"].text,
                           task=r["obs"].text or "") for r in live]
         images = [[*r["ctx"].images, r["obs"].rgb] for r in live]
-        gens, secs = timed(act_all, policy, prompts, images)
+        gens, secs = timed(act_all, policy, prompts, images, greedy)
         for r, prompt, ims, gen in zip(live, prompts, images, gens):
             r["secs"] += secs / len(live)
             r["tin"] += gen.prompt_tokens

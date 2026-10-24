@@ -57,6 +57,8 @@ class LoopConfig:
     gate_enabled: bool = True      # off is allowed for ablations, and is recorded in the log
     gate_n: int = 32
     gate_parse_fail_delta: float = 0.05
+    eval_greedy: bool = True       # gate and held-out decode greedily: a sampled score of a fixed policy is one
+                                   # noisy draw, and the gate would be comparing changes against that draw
     gate_allowed_signals: tuple[str, ...] = ("outcome",)   # signals that would exist at deployment
 
     # judges
