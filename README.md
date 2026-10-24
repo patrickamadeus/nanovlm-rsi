@@ -13,10 +13,18 @@ no framework owning the control flow.
 
 ## How one iteration works
 
-```
-curriculum ──► tasks ──► rollout ──► judge ──► update ──► gate ──► keep / revert
-(what to       (train    (policy     (reward   (GRPO step  (better on the gate
- practise)      split)    answers)    per try)  or memory)  split? keep, else undo)
+```mermaid
+flowchart LR
+    pool[("train split<br/>task pool")] -->|"curriculum picks"| tasks["tasks for<br/>this iteration"]
+    tasks --> rollout["rollout<br/>a group of attempts<br/>per task"]
+    policy(["policy<br/>SmolVLM + LoRA / memory"]) -->|"answers with<br/>current weights"| rollout
+    rollout --> judge["judge (verifier)<br/>reward per attempt"]
+    judge --> update["update<br/>GRPO step or<br/>new skills"]
+    update --> gate{"gate<br/>worse on the<br/>gate split?"}
+    gate -->|"no: keep"| policy
+    gate -->|"yes: undo exactly"| policy
+    held[("held-out split")] -.->|"every N iterations,<br/>report only"| report["held-out success<br/>+ MMStar (lmms-eval)"]
+    policy -.-> report
 ```
 
 | Term | What it is | Where |
@@ -36,7 +44,8 @@ current model's own attempt — but it does not yet plan: it never writes tasks 
 ## Layout
 
 ```
-train.py        the loop, top to bottom — read this first
+picoRSI.ipynb   the whole loop in one standalone notebook (~150 lines) — start here
+train.py        the loop, top to bottom, with every part plugged in
 evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
 generate.py     watch the policy act on one task, step by step
 configs/        config.py (every knob) + yaml/ (one file per experiment) + openvlharness/ (agent configs)
