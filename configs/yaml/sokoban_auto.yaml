@@ -1,8 +1,9 @@
-# The autonomous loop on sokoban: the policy picks (or invents) its next level, hindsight turns failures into
-# successes for the goal they reached, ViSkill keeps visual cards of what worked, GRPO trains the weights.
+# The autonomous loop on sokoban: the policy picks (or invents) its next level, GRPO learns from its attempts,
+# and hindsight turns each failure into a success for the goal it did reach, which ReST then trains on.
 # Nobody chooses tasks or labels anything after launch. No gate, as in VAGEN and SIMA 2: held-out eval reports.
+# (ViSkill cards were dropped here: on FrozenLake they lowered success, 32.5% with vs 64% without, at 3B.)
 env: sokoban
-methods: [hindsight, viskill, grpo]
+methods: [hindsight, grpo, rest]
 planner: voyager
 iters: 40
 tasks_per_iter: 8
