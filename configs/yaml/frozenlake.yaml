@@ -11,6 +11,7 @@ eval_n: 200
 gate_n: 32
 grpo_lr: 3.0e-4                 # picked on FrozenLake: 7.5% -> 37.5% held-out by iteration 10 (1e-4: 33%)
 run_dir: runs/frozenlake_grpo
+gate_enabled: false            # as in VAGEN and frozenlake_auto: the two differ only in planner + learning from failure
 # How the policy answers: VAGEN's free_think format and settings (mll-lab-nu/VAGEN), prompt in prompts/frozenlake.txt
 answer_format: answer          # <think>...</think><answer>a1, a2</answer>
 max_actions_per_turn: 5
