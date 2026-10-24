@@ -12,6 +12,7 @@ eval_every: 10
 eval_n: 200
 gate_n: 32
 grpo_lr: 3.0e-4                 # picked on FrozenLake: 7.5% -> 37.5% held-out by iteration 10 (1e-4: 33%)
+rest_lr: 1.0e-4                 # ReST on LoRA; the 1e-5 default is for full fine-tuning scale
 run_dir: runs/frozenlake_auto
 gate_enabled: false
 # skill settings from ViSkill: one card, shown only if close enough; only optimal-length successes are kept
