@@ -67,6 +67,7 @@ class Policy:
         self.model.to(self.device).eval().requires_grad_(False)   # nothing trains unless a carrier opts in
         self.mode, self.reference = "frozen", None
         self.version = 0                    # bumped by every weight change; tells GRPO whether pi_old == pi
+        self.tokens = 0                     # prompt + completion tokens of every act / act_batch: method calls are cost too
         tok = self.processor.tokenizer
         self.stop_ids = [tok.eos_token_id] + (tok("\n", add_special_tokens=False).input_ids if cfg.stop_at_newline else [])
         # image placeholders are never valid output: one sampled <image> breaks the re-scoring forward pass
@@ -166,6 +167,7 @@ class Policy:
             completions.append(ids[:stop + 1] if stop is not None else ids)
         lps = self._score_batch(batch, completions)
         n_real = batch["attention_mask"].sum(1).tolist()
+        self.tokens += int(sum(n_real)) + sum(map(len, completions))
         return [RolloutStep(f"{prefix} {t.strip()}" if prefix else t, ids, lp.float().cpu().numpy(), int(n))
                 for ids, lp, n, t in zip(completions, lps, n_real,
                                          (tok.decode(c, skip_special_tokens=True) for c in completions))]
@@ -223,6 +225,7 @@ class Policy:
         # past the clip before any parameter moved. pi_old must be exactly what logprobs() computes.
         lp = self._score(inputs, ids).float()
         text = self.processor.tokenizer.decode(ids, skip_special_tokens=True)
+        self.tokens += n_prompt + len(ids)
         prefix = self.cfg.response_prefix if prefix is None else prefix
         if prefix:                     # the prefilled tokens are prompt, not policy output, but parsing needs them
             text = f"{prefix} {text.strip()}"

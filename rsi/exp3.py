@@ -15,6 +15,8 @@ class Exp3(Planner):
     name = "exp3"
 
     def __init__(self, cfg, names: list[str], rng: np.random.Generator):
+        if cfg.exp3_k != 1:      # drawn without replacement, an arm's inclusion probability is no longer p[i]
+            raise ValueError("exp3_k must be 1: the importance weights assume one arm per iteration")
         self.names, self.cfg, self.rng = list(names), cfg, rng
         self.w = np.zeros(len(self.names))
         self.chosen: list[str] = []

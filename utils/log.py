@@ -43,8 +43,9 @@ class Trace:
         open(self.path, "a").close()
         heal_tail(self.path)
         self._cost = Cost()
-        for rec in self.records("rollout"):
-            self._cost += _rollout_cost(rec)
+        for rec in self.records():
+            if rec.get("kind") in ("rollout", "cost"):
+                self._cost += _rollout_cost(rec)
 
     def _write(self, kind: str, fields: dict) -> None:
         rec = {"kind": kind, "run_id": self.run_id, "iso_ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **fields}
@@ -58,6 +59,11 @@ class Trace:
         # every env step and token, including eval rollouts, is cost: matched-cost comparison depends on it
         self._cost += _rollout_cost(fields)
         self._write("rollout", fields)
+
+    def log_cost(self, **fields) -> None:
+        """Work outside rollouts — a method's own generations, hindsight replays — counted like rollout cost."""
+        self._cost += _rollout_cost(fields)
+        self._write("cost", fields)
 
     def log_update(self, **fields) -> None:
         self._write("update", fields)

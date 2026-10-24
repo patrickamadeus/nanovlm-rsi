@@ -39,7 +39,7 @@ def make_method(name: str, cfg, policy, env=None, shared: dict | None = None):
         return ReST(policy, cfg, weights())
     if name == "memory":
         from rsi.memory import Memory, SkillStore
-        return Memory(skill_store(cfg, policy), cfg, env, policy)
+        return Memory(skill_store(cfg, policy, "skills.jsonl"), cfg, env, policy)
     if name == "hindsight":
         from rsi.hindsight import Hindsight
         return Hindsight(cfg)
@@ -51,13 +51,14 @@ def make_method(name: str, cfg, policy, env=None, shared: dict | None = None):
         return Reflexion(cfg, policy, env, lambda text: policy.embed(text, []))
     if name == "viskill":
         from rsi.viskill import ViSkill
-        return ViSkill(skill_store(cfg, policy), cfg, env, policy)
+        return ViSkill(skill_store(cfg, policy, "cards.jsonl"), cfg, env, policy)
     raise ValueError(f"unknown method {name!r}")
 
 
-def skill_store(cfg, policy):
+def skill_store(cfg, policy, filename: str):
+    """One file per method: two methods truncating one log on revert would undo each other's commits."""
     from rsi.memory import SkillStore
-    return SkillStore(os.path.join(cfg.run_dir, "skills.jsonl"), embed_fn=lambda text: policy.embed(text, []),
+    return SkillStore(os.path.join(cfg.run_dir, filename), embed_fn=lambda text: policy.embed(text, []),
                       max_size=cfg.mem_max_size, dedupe_sim=cfg.mem_dedupe_sim)
 
 
@@ -92,7 +93,8 @@ def make_update_planner(cfg, names: list[str]):
     raise ValueError(f"unknown update planner {cfg.update_planner!r}")
 
 
-def make_judge(cfg, env=None):
+def make_judge(cfg, env=None, families: set | None = None):
+    """families: the task families whose reward is ground truth (every stage's, in a lifelong run)."""
     from rsi.judges import CompositeJudge, OutcomeJudge, VLMJudge, YesNo
     if cfg.judge == "outcome":
         return OutcomeJudge()
@@ -102,5 +104,6 @@ def make_judge(cfg, env=None):
         vlm = VLMJudge(YesNo(PolicyConfig(model_id=cfg.judge_model_id, tiny=p.tiny, device=p.device, dtype=p.dtype)))
         if cfg.judge == "vlm":
             return vlm
-        return CompositeJudge(OutcomeJudge(), vlm, getattr(env, "families", set()), cfg.judge_sample_rate, cfg.seed)
+        native = families if families is not None else getattr(env, "families", set())
+        return CompositeJudge(OutcomeJudge(), vlm, native, cfg.judge_sample_rate, cfg.seed)
     raise ValueError(f"unknown judge {cfg.judge!r}")

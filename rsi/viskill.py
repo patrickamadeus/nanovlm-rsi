@@ -124,6 +124,18 @@ class ViSkill(Memory):
         self.store.expire()
         self._added[update.payload["revert_offset"]] = added
 
+    def revert(self, update) -> None:
+        super().revert(update)
+        for sid in self._added.get(update.payload["revert_offset"], []):
+            path = os.path.join(self.card_dir, f"{sid}.png")
+            if os.path.exists(path):
+                os.remove(path)
+
+    def persisted(self, update) -> bool:
+        added = self._added.get(update.payload["revert_offset"], [])
+        return super().persisted(update) and all(os.path.exists(os.path.join(self.card_dir, f"{sid}.png"))
+                                                 for sid in added)
+
     def image(self, path: str) -> np.ndarray:
         if path not in self._images:
             self._images[path] = np.asarray(Image.open(path).convert("RGB"))

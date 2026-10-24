@@ -46,3 +46,12 @@ def test_success_rate_tracks_family_goal(tmp_path):
         tr.log_rollout(family="count_objects", goal=["3"], split="train", reward=r)
     assert tr.success_rate("count_objects", ("3",)) == pytest.approx(2 / 3)
     assert tr.success_rate("count_objects", ("9",)) is None
+
+
+def test_method_cost_records_count_toward_cumulative_cost(tmp_path):
+    from utils.log import Trace
+    tr = Trace(str(tmp_path))
+    tr.log_rollout(env_steps=2, tokens_in=10, tokens_out=1)
+    tr.log_cost(tokens_in=5, env_steps=3, source="methods")
+    assert tr.cumulative_cost.policy_tokens == 16 and tr.cumulative_cost.env_steps == 5
+    assert Trace(str(tmp_path)).cumulative_cost.policy_tokens == 16          # survives a reload

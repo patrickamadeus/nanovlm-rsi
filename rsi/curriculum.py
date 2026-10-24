@@ -79,4 +79,5 @@ class Frontier(Planner):
 
     def observe(self, batch: list, results: dict) -> None:
         for s in batch:
-            self.table.add(self.env.task_key(s.traj.task), s.reward >= 1.0)
+            if s.origin == "attempt":          # a hindsight copy is not a success at the task that was practised
+                self.table.add(self.env.task_key(s.traj.task), s.traj.total_reward >= 1.0)

@@ -169,6 +169,11 @@ class SkillStore:
         return "Skills that worked before:\n" + "\n".join(lines)
 
 
+def clean(text: str) -> str:
+    """Policy-written text goes into prompts later: a literal <image> would claim an image that isn't there."""
+    return " ".join(text.replace("<image>", " ").split())
+
+
 def situation(scored) -> str:
     # what the policy saw, never task.goal: for count_objects the goal is the answer itself
     return scored.traj.steps[0].get("obs_text", "") if scored.traj.steps else ""
@@ -205,7 +210,8 @@ class Memory(Method):
     def observe(self, batch) -> None:
         """Use attribution: was the skill in context when the attempt succeeded? Utility and expiry read it."""
         for s in batch:
-            self.store.note_use(list(s.traj.context_ids), succeeded=s.reward >= 1.0)
+            if s.origin == "attempt":          # a hindsight copy would credit the skills of a failure
+                self.store.note_use(list(s.traj.context_ids), succeeded=s.traj.total_reward >= 1.0)
 
     def admissible(self, s) -> bool:
         """A success, unflagged, and (if the env has a solver) within mem_max_excess_steps of optimal:
@@ -224,7 +230,7 @@ class Memory(Method):
         moves = ", ".join(st["action"] for st in s.traj.steps if st["action"] is not None)
         first = s.traj.steps[0]["images"][-1:] if s.traj.steps and s.traj.steps[0].get("images") else []
         out = self.policy.act(STRATEGY_PROMPT.format(moves=moves), list(first), prefix="Strategy:")
-        return out.text.removeprefix("Strategy:").strip()
+        return clean(out.text.removeprefix("Strategy:"))
 
     def skill_record(self, s) -> dict:
         key = self.key(s.traj.task, self.env) if self.env is not None else situation(s)

@@ -33,6 +33,9 @@ class PPO(WeightMethod):
         torch.nn.init.zeros_(self.head.weight)
         torch.nn.init.zeros_(self.head.bias)
         self.head_opt = torch.optim.AdamW(self.head.parameters(), lr=self.cfg.ppo_value_lr, weight_decay=0.0)
+        if self.cfg.resume and os.path.exists(self.head_path):
+            from safetensors.torch import load_file
+            self.head.load_state_dict({k: v.to(self.policy.device) for k, v in load_file(self.head_path).items()})
 
     def backward(self, batch: list) -> dict | None:
         runs = [s for s in batch if not s.flags and s.origin == "attempt"]

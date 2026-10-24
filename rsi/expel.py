@@ -12,7 +12,7 @@ import os
 
 import numpy as np
 
-from rsi.memory import Memory, Skill, SkillStore
+from rsi.memory import Memory, SkillStore, clean
 from rsi.gate import Update
 from utils.log import Cost
 from utils.rollout import Context
@@ -65,7 +65,7 @@ class ExpeL(Memory):
             win, lose = min(wins, key=lambda s: s.traj.env_steps), fails[0]
             prompt = PAIR_PROMPT.format(win=moves(win), lose=moves(lose), ending=ending(lose))
             rule = self.policy.act(prompt, [win.traj.steps[0]["images"][-1]], prefix="Rule:").text
-            rule = rule.removeprefix("Rule:").strip()
+            rule = clean(rule.removeprefix("Rule:"))
             if rule and rule not in known:
                 known.add(rule)
                 rules.append({"family": win.traj.task.family, "situation": "", "actions": [], "reward": 1.0,

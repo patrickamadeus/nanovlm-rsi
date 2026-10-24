@@ -31,7 +31,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
     policy   = policy or make_policy(cfg.policy)
     envs     = {name: make_env(replace(cfg, env=name)) for name in stages}
     log      = Trace(cfg.run_dir)
-    judge    = make_judge(cfg, envs[stages[0]])
+    judge    = make_judge(cfg, families=set().union(*(getattr(e, "families", set()) for e in envs.values())))
     methods  = make_methods(cfg, policy, envs[stages[0]])     # grpo, memory, ... in config order
     chooser  = make_update_planner(cfg, [m.name for m in methods if m.changes])   # which methods update
     heldout  = {name: e.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed)) for name, e in envs.items()}
@@ -53,6 +53,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
             for name, e in envs.items():                     # every stage, every time: the retention matrix
                 evaluate(policy, e, heldout[name], log, cfg, methods=methods, env_name=name)
 
+        spent = getattr(policy, "tokens", 0)
         tasks = planner.tasks(cfg.tasks_per_iter)            # train split only
         contexts, ctx_s = timed(contexts_for, methods, env, tasks)
         group = [t for t in tasks for _ in range(cfg.group_size)]
@@ -64,13 +65,17 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
                             flags=scored.flags, iter=it, stage=stage, judge_verdict=scored.judge_verdict,
                             judge_tokens=scored.judge_tokens)
             batch.append(scored)
+        spent -= getattr(policy, "tokens", 0)                # what the planner itself generated
         for m in methods:                                    # hindsight, skill rewards: reshape before anyone learns
             batch = m.signal(batch, env)
+        replayed = sum(s.traj.env_steps for s in batch if s.origin != "attempt")
 
         results, before = {}, None                           # each update is gated on its own
         names = chooser.updates([m.name for m in methods if m.changes])
         for m in (m for m in methods if m.name in names):
+            before_tokens = getattr(policy, "tokens", 0)
             update = m.propose(batch)
+            spent -= getattr(policy, "tokens", 0) - before_tokens      # strategies, rules, reflections it wrote
             stats = {**(getattr(planner, "last_stats", None) or {}), **(getattr(chooser, "last_stats", None) or {})}
             if update is None:
                 log.log_update(iter=it, method=m.name, committed=False, gate_enabled=cfg.gate_enabled,
@@ -84,6 +89,8 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
                            gate_enabled=result.gate_enabled, conditions=result.conditions, reason=result.reason,
                            gate_before=result.before, gate_after=result.after, planner_stats=stats,
                            **{k: v for k, v in update.payload.items() if isinstance(v, (int, float))})
+        if spent or replayed:
+            log.log_cost(iter=it, tokens_in=-spent, env_steps=replayed, source="methods")
         for m in methods:
             m.observe(batch)
         planner.observe(batch, results)
@@ -98,7 +105,7 @@ def train(cfg: LoopConfig, policy=None) -> EvalResult:
 def check_run_dir(cfg: LoopConfig) -> None:
     """A second run in the same directory would inherit memory, cost and trained goals, so the
     'pre-RSI baseline' would not be one. Refuse unless the caller is resuming on purpose."""
-    used = [f for f in ("trace.jsonl", "skills.jsonl")
+    used = [f for f in ("trace.jsonl", "skills.jsonl", "cards.jsonl", "rules.jsonl", "reflections.jsonl")
             if os.path.exists(os.path.join(cfg.run_dir, f)) and os.path.getsize(os.path.join(cfg.run_dir, f))]
     if used and not cfg.resume:
         raise FileExistsError(f"{cfg.run_dir} already holds {used}; pick a new --run_dir or pass --resume true")

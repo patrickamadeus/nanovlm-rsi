@@ -132,3 +132,47 @@ def test_recall_runs_once_per_task_not_per_group_member(tmp_path):
     train(cfg, policy=policy)
     train_recalls = len(calls)
     assert train_recalls <= 2 + 2 + 2 * 2      # train tasks + final eval + gate before/after — never x group_size
+
+
+# rsi-v2 review — hindsight copies are not evidence of success for planners or skill utility
+def test_frontier_and_skill_utility_ignore_hindsight_copies(tmp_path):
+    from dataclasses import replace as dc_replace
+    from rsi import make_planner
+    from rsi.judges import ScoredTrajectory
+    from rsi.memory import Memory
+    from utils.rollout import Trajectory
+    env = StaticEnv()
+    t = env.tasks("train", 1, np.random.default_rng(0))[0]
+    fail = ScoredTrajectory(Trajectory(t, [], 0.0, 1, 0, 1, context_ids=("k1",)), 0.0, None, "outcome", 1.0, ())
+    copy = dc_replace(fail, reward=1.0, origin="hindsight")
+    planner = make_planner(env, LoopConfig(planner="frontier"))
+    planner.observe([fail, copy], {})
+    assert planner.table.rate(env.task_key(t)) == 0.0
+    store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
+    sid = store.append(Skill("k1", "f", "s", ("x",), 1.0, fake_embed("s")))
+    Memory(store, LoopConfig()).observe([fail, copy])
+    s = store.skills()[0]
+    assert s.uses == 1 and s.uses_before_success == 0
+
+
+def test_each_memory_method_has_its_own_store_file(tmp_path):
+    from rsi import make_methods
+    ms = make_methods(LoopConfig(methods=("memory", "viskill"), run_dir=str(tmp_path)), ScriptedPolicy([]))
+    assert ms[0].store.path != ms[1].store.path
+
+
+def test_grpo_group_statistics_skip_flagged_rows():
+    from rsi.grpo import GRPO
+    from rsi.judges import ScoredTrajectory
+    from utils.rollout import Trajectory
+    t = StaticEnv().tasks("train", 1, np.random.default_rng(0))[0]
+
+    def sc(r, flags=()):
+        return ScoredTrajectory(Trajectory(t, [], r, 1, 0, 1), r, None, "outcome", 1.0, flags)
+    g = GRPO.__new__(GRPO)
+    assert g.backward([sc(1.0, ("action_loop",)), sc(0.0), sc(0.0)]) is None   # only a flagged win: no real signal
+
+
+def test_generated_text_cannot_smuggle_image_placeholders():
+    from rsi.memory import clean
+    assert clean("go <image> right") == "go right"

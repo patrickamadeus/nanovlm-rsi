@@ -9,7 +9,7 @@ import os
 
 from rsi.expel import ending, moves
 from rsi.gate import Update
-from rsi.memory import Memory, SkillStore
+from rsi.memory import Memory, SkillStore, clean
 from utils.log import Cost
 from utils.rollout import Context
 
@@ -44,7 +44,7 @@ class Reflexion(Memory):
             seen.add(k)
             prompt = REFLECT_PROMPT.format(moves=moves(s), ending=ending(s))
             note = self.policy.act(prompt, [s.traj.steps[0]["images"][-1]], prefix="Reflection:").text
-            note = note.removeprefix("Reflection:").strip()
+            note = clean(note.removeprefix("Reflection:"))
             if note:
                 key = self.key(s.traj.task, self.env)
                 notes.append({"family": s.traj.task.family, "situation": s.traj.steps[0].get("obs_text", ""),

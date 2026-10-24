@@ -45,7 +45,8 @@ class GRPO(WeightMethod):
     name = "grpo"
 
     def backward(self, batch: list) -> dict | None:
-        batch = [s for s in batch if s.origin == "attempt"]   # a relabelled copy would join its original's group
+        # a relabelled copy would join its original's group; a flagged win would shift its groupmates' baseline
+        batch = [s for s in batch if s.origin == "attempt" and not s.flags]
         keys = [f"{s.traj.task.family}:{s.traj.task.seed}" for s in batch]
         adv = group_advantages([s.reward for s in batch], keys)
         kept = [(s, a) for s, a in zip(batch, adv) if not np.isnan(a) and not s.flags and s.origin == "attempt"]
