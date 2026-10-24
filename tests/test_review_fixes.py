@@ -60,7 +60,7 @@ def test_skill_ids_are_not_reused_after_revert(tmp_path):
 # I2 — reusing a run_dir is refused unless resuming; records carry a run_id
 def test_reusing_a_run_dir_requires_resume(tmp_path):
     cfg = LoopConfig(iters=1, tasks_per_iter=1, group_size=1, eval_n=2, gate_n=2, heldout_n=8, run_dir=str(tmp_path),
-                     update="memory")
+                     methods=("memory",))
     train(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
     with pytest.raises(FileExistsError):
         train(cfg, policy=ScriptedPolicy(iter(lambda: "ACT: pick", None)))
@@ -73,7 +73,7 @@ def test_reusing_a_run_dir_requires_resume(tmp_path):
 
 # I3 — act() logprobs equal a re-score in the configured (bf16) dtype
 def test_act_logprobs_match_rescore_in_bfloat16():
-    from models.smolvlm import Policy
+    from models.vlm import Policy
     p = Policy(PolicyConfig(tiny=True, device="cpu", dtype="bfloat16", max_new_tokens=8))
     img = [np.zeros((64, 64, 3), np.uint8)]
     step = p.act("hello", img)
@@ -123,7 +123,7 @@ def test_recall_runs_once_per_task_not_per_group_member(tmp_path):
             return fake_embed(text)
 
     cfg = LoopConfig(iters=1, tasks_per_iter=2, group_size=4, eval_n=2, gate_n=2, heldout_n=8,
-                     eval_every=100, run_dir=str(tmp_path), update="memory")
+                     eval_every=100, run_dir=str(tmp_path), methods=("memory",))
     store_path = tmp_path / "skills.jsonl"
     SkillStore(str(store_path), embed_fn=fake_embed).append(Skill("", "f", "seed skill", ("pick",), 1.0,
                                                                   fake_embed("seed skill")))

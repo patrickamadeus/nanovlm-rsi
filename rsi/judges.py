@@ -53,7 +53,7 @@ class YesNo:
     """P(yes) from a frozen VLM, read off the logprobs of ' yes' vs ' no' after a prefilled 'Answer:'."""
 
     def __init__(self, policy_cfg):
-        from models.smolvlm import Policy
+        from models.vlm import Policy
         self.policy = Policy(replace(policy_cfg, response_prefix="Answer:"))
         tok = self.policy.processor.tokenizer
         self.yes = tok(" yes", add_special_tokens=False).input_ids

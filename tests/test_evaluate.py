@@ -38,7 +38,8 @@ def test_evaluate_does_not_write_to_the_store(trace, tmp_path):
     store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
     store.append(Skill("", "count_objects", "count", ("3",), 1.0, fake_embed("count")))
     before = (tmp_path / "s.jsonl").read_bytes()
-    evaluate(say3(), env, GOAL3, trace, LoopConfig(), store=store)
+    from rsi.memory import Memory
+    evaluate(say3(), env, GOAL3, trace, LoopConfig(), methods=[Memory(store, LoopConfig())])
     assert (tmp_path / "s.jsonl").read_bytes() == before
 
 
@@ -58,3 +59,13 @@ def test_eval_fn_for_gate_returns_success_and_parse_fail_rates(trace):
     success, parse_fail = fn(GOAL3)
     assert success == 0.0 and parse_fail == 1.0
     assert {r["split"] for r in trace.records("rollout")} >= {"heldout"}
+
+
+def test_evaluate_shows_memory_to_the_policy_and_logs_success_per_task_key(trace, tmp_path):
+    from rsi.memory import Memory
+    store = SkillStore(str(tmp_path / "s.jsonl"), embed_fn=fake_embed)
+    store.append(Skill("", "count_objects", "How many blue squares", ("3",), 1.0, fake_embed("How many blue squares")))
+    policy = say3()
+    evaluate(policy, env, GOAL3 + GOAL5, trace, LoopConfig(), methods=[Memory(store, LoopConfig())])
+    assert all("Skills that worked before" in p for p in policy.prompts)
+    assert trace.records("eval")[-1]["by_key"] == {"count_objects:3": 1.0, "count_objects:5": 0.0}

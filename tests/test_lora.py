@@ -57,3 +57,18 @@ def test_adapters_stay_float32_on_a_bfloat16_base():
     out = layer(torch.randn(3, 6, dtype=torch.bfloat16))
     assert out.dtype == torch.bfloat16
 
+
+
+def test_scope_is_found_for_qwen_style_names():
+    import torch.nn as nn
+    from models.lora import apply_lora
+
+    class Attn(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj, self.v_proj = nn.Linear(4, 4), nn.Linear(4, 4)
+
+    m = nn.Module()
+    m.language_model, m.visual = nn.Module(), nn.Module()
+    m.language_model.attn, m.visual.attn = Attn(), Attn()
+    assert apply_lora(m, 2, 4) == ["language_model.attn.q_proj", "language_model.attn.v_proj"]

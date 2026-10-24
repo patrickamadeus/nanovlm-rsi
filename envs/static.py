@@ -49,6 +49,9 @@ class StaticEnv(SeededTasks, Env):
     def make_task(self, seed: int) -> Task:
         return make_task(seed, self._families)
 
+    def task_key(self, task: Task) -> str:
+        return f"{task.family}:{'/'.join(task.goal)}"    # one key per count / per order, as before
+
     @property
     def actions(self) -> list[str]:
         # count answers are bare digits: that is what a VLM naturally says when asked "how many?"

@@ -12,8 +12,10 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from utils.log import Cost, heal_tail
+from rsi.base import Method
 from rsi.gate import Update
+from utils.log import Cost, heal_tail
+from utils.rollout import Context
 
 
 @dataclass(frozen=True)
@@ -140,10 +142,24 @@ def situation(scored) -> str:
     return scored.traj.steps[0].get("obs_text", "") if scored.traj.steps else ""
 
 
-class Memory:
+class Memory(Method):
+    name, changes = "memory", "memory"
+
     def __init__(self, store: SkillStore, cfg):
         self.store, self.cfg = store, cfg
         self._added: dict[int, list[str]] = {}    # revert_offset -> skill ids that commit actually wrote
+
+    def context(self, task, env) -> Context:
+        """The k skills whose situation is nearest this task's first observation, keyed exactly as propose() wrote them."""
+        if not len(self.store) or self.cfg.mem_top_k <= 0:
+            return Context()
+        skills = self.store.retrieve(env.fork().reset(task).text or "", self.cfg.mem_top_k)
+        return Context(self.store.as_text(skills), (), tuple(s.id for s in skills))
+
+    def observe(self, batch) -> None:
+        """Use attribution: was the skill in context when the attempt succeeded? Expiry ranks skills by it."""
+        for s in batch:
+            self.store.note_use(list(s.traj.context_ids), succeeded=s.reward >= 1.0)
 
     def propose(self, batch) -> Update | None:
         keep = [s for s in batch if s.reward >= self.cfg.mem_write_threshold and not s.flags]

@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from configs.config import PolicyConfig
-from models.smolvlm import Policy
+from models.vlm import Policy
 
 IMG = [np.zeros((64, 64, 3), np.uint8)]
 
@@ -79,7 +79,7 @@ def test_generation_stops_at_the_end_of_the_action_line(tiny):
 
 def test_small_env_images_are_one_tile_not_upscaled_and_split():
     from transformers import AutoProcessor
-    from models.smolvlm import configure_images
+    from models.vlm import configure_images
     proc = AutoProcessor.from_pretrained(PolicyConfig().model_id)
     configure_images(proc, 512)
     from PIL import Image
@@ -122,3 +122,31 @@ def test_policy_never_emits_image_placeholder_tokens(tiny):
     finally:
         with torch.no_grad():
             head.weight[image_id] = saved
+
+
+def test_act_batch_returns_one_step_per_prompt_scored_like_logprobs(tiny):
+    prompts = ["hello", "a much longer prompt that needs left padding in the batch", "hi"]
+    images = [IMG, IMG, IMG + IMG]                       # rows may carry different numbers of images
+    steps = tiny.act_batch(prompts, images)
+    assert len(steps) == 3
+    for p, im, s in zip(prompts, images, steps):
+        assert len(s.token_ids) == len(s.logprobs) > 0 and s.text.startswith("ACT:")
+        np.testing.assert_allclose(tiny.logprobs(p, im, s.token_ids).detach().numpy(), s.logprobs,
+                                   rtol=1e-3, atol=1e-3)
+
+
+def test_greedy_batch_matches_greedy_one_at_a_time(tiny):
+    prompts = ["hello", "a much longer prompt that needs left padding in the batch"]
+    batch = tiny.act_batch(prompts, [IMG, IMG], greedy=True)
+    for p, s in zip(prompts, batch):
+        assert s.token_ids == tiny.act(p, IMG, greedy=True).token_ids
+
+
+def test_a_completion_stops_at_its_first_stop_token(tiny):
+    for s in tiny.act_batch(["x"] * 4, [IMG] * 4):
+        stops = [i for i, t in enumerate(s.token_ids) if t in tiny.stop_ids]
+        assert not stops or stops[0] == len(s.token_ids) - 1
+
+
+def test_image_placeholder_tokens_are_never_sampled(tiny):
+    assert tiny.never                                   # found from the tokenizer, not a hard-coded model list

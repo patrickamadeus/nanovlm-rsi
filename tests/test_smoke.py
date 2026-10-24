@@ -10,7 +10,7 @@ from tests.conftest import ScriptedPolicy
 
 def small(tmp_path, **kw):
     base = dict(iters=2, tasks_per_iter=2, group_size=2, eval_every=1, eval_n=4, gate_n=4, heldout_n=8,
-                run_dir=str(tmp_path), env="static", update="memory")
+                run_dir=str(tmp_path), env="static", methods=("memory",))
     return LoopConfig(**{**base, **kw})
 
 
@@ -47,7 +47,7 @@ def test_loop_survives_iterations_with_no_usable_signal(tmp_path):
 def test_run_record_captures_provenance(tmp_path):
     train(small(tmp_path, iters=1), policy=ScriptedPolicy(cycle(["ACT: pick"])))
     rec = Trace(str(tmp_path)).records("run")[0]
-    assert rec["update"] == "memory" and rec["curriculum"] == "uniform"
+    assert rec["methods"] == ["memory"] and rec["planner"] == "uniform"
     assert rec["config"]["group_size"] == 2                     # the full config travels with the run
     assert rec["cfg_hash"] and "git_sha" in rec
 
@@ -62,14 +62,14 @@ def test_composite_judge_logs_judge_agreement_in_the_loop(tmp_path):
 
 
 def test_frontier_curriculum_runs_in_the_loop_and_logs_its_stats(tmp_path):
-    train(small(tmp_path, curriculum="frontier", gate_enabled=False, tasks_per_iter=4),
+    train(small(tmp_path, planner="frontier", gate_enabled=False, tasks_per_iter=4),
         policy=ScriptedPolicy(cycle(["ACT: 3"])))
     updates = Trace(str(tmp_path)).records("update")
-    assert updates and all("frontier_frac" in u["curriculum_stats"] for u in updates)   # every iteration, update or not
+    assert updates and all("frontier_frac" in u["planner_stats"] for u in updates)   # every iteration, update or not
 
 
 def test_grpo_closes_the_loop_with_the_real_tiny_policy(tmp_path):
-    cfg = small(tmp_path, iters=2, tasks_per_iter=2, group_size=4, update="grpo", gate_enabled=False,
+    cfg = small(tmp_path, iters=2, tasks_per_iter=2, group_size=4, methods=("grpo",), gate_enabled=False,
                 policy=PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=4,
                                     response_prefix="ACT:"))
     assert isinstance(train(cfg), EvalResult)

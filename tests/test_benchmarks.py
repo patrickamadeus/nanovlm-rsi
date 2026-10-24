@@ -30,7 +30,7 @@ def test_answer_feeds_the_task_image_and_prompt_and_cuts_at_stop_strings():
 def test_load_run_restores_config_and_committed_lora_weights(tmp_path):
     from dataclasses import asdict
 
-    from models.smolvlm import Policy
+    from models.vlm import Policy
     from safetensors.torch import save_file
     cfg = LoopConfig(run_dir=str(tmp_path), lora_r=2, lora_alpha=4,
                      policy=PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=4))

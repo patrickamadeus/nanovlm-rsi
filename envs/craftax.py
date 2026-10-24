@@ -44,6 +44,9 @@ class CraftaxEnv(SeededTasks, Env):
         goal = GOALS[int(np.random.default_rng(seed).integers(len(GOALS)))]
         return Task("craftax_achieve", seed, (goal,), self.budget, split_for_seed(seed))
 
+    def task_key(self, task: Task) -> str:
+        return f"{task.family}:{task.goal[0]}"          # one key per achievement
+
     @property
     def actions(self) -> list[str]:
         return ACTIONS

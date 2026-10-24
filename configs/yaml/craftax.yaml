@@ -2,8 +2,8 @@
 env: craftax
 craftax_budget: 64
 judge: outcome
-update: grpo
-curriculum: frontier
+methods: [grpo]
+planner: frontier
 iters: 50
 tasks_per_iter: 4
 group_size: 8

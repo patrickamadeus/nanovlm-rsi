@@ -1,6 +1,6 @@
 """The acceptance bar, as code. An update is kept only if all five conditions hold.
 
-Every update mode (rsi/grpo.py, rsi/memory.py) has the same four methods:
+Every updating method (rsi/base.py Method) has the same four methods:
     propose(batch) -> Update | None    turn scored trajectories into a candidate change
     commit(update)                     apply it durably (to disk)
     revert(update)                     undo it exactly — the gate depends on this
@@ -41,14 +41,17 @@ class GateResult:
     after: tuple[float, float] | None = None
 
 
-def gate(update: Update, updater, env: Env, cfg: LoopConfig, *, eval_fn: EvalFn) -> GateResult:
+def gate(update: Update, updater, env: Env, cfg: LoopConfig, *, eval_fn: EvalFn,
+         before: tuple[float, float] | None = None) -> GateResult:
+    """`before` lets a second update in the same iteration reuse the first one's final measurement:
+    nothing changed in between, so measuring again would only cost rollouts."""
     names = ("proposed", "survives_reset", "gate_gain", "deployment_feedback", "no_regression")
     if not cfg.gate_enabled:       # allowed for ablations — and self-identifying, so it can't pass as gated
         updater.commit(update)
         return GateResult(True, dict.fromkeys(names), None, False)
 
     tasks = env.tasks("gate", cfg.gate_n, np.random.default_rng(cfg.seed))   # same gate set every decision
-    before = eval_fn(tasks)
+    before = before if before is not None else eval_fn(tasks)
     updater.commit(update)
     after = eval_fn(tasks)
     conditions = {

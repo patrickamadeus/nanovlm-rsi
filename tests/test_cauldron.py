@@ -4,7 +4,7 @@ import pytest
 from configs.config import LoopConfig
 from envs.base import split_for_seed
 from envs.cauldron import CauldronEnv, answer_key, items_from_rows
-from rsi.curriculum import make_curriculum
+from rsi import make_planner
 from tests.conftest import ScriptedPolicy
 from utils.rollout import rollout
 
@@ -78,10 +78,10 @@ def test_splits_follow_the_row_hash_and_held_out_is_frozen():
         env.tasks("heldout", 21, np.random.default_rng(0))
 
 
-def test_the_curriculum_accepts_cauldron_train_tasks():
+def test_the_planners_accept_cauldron_train_tasks():
     env = _env()
-    for curriculum in ("uniform", "frontier"):
-        tasks = make_curriculum(env, LoopConfig(curriculum=curriculum, tasks_per_iter=4))(None, None)
+    for planner in ("uniform", "frontier"):
+        tasks = make_planner(env, LoopConfig(planner=planner)).tasks(4)
         assert len(tasks) == 4 and {t.split for t in tasks} == {"train"}
 
 

@@ -18,7 +18,7 @@ import numpy as np
 from configs.config import LoopConfig, load_config
 from envs.base import Env, Task
 from utils.log import Cost, Trace
-from utils.rollout import recall, rollout, rollout_record
+from utils.rollout import rollout_group, rollout_record, timed
 
 
 @dataclass(frozen=True)
@@ -36,40 +36,48 @@ def _rate(xs: list[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
 
 
-def run_tasks(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, store=None) -> list:
-    """Roll out each task once, read-only on memory, logging every rollout as cost."""
-    trajs = []
-    for task in tasks:
-        memory_text, ids, secs = recall(store, env, task, cfg.mem_top_k)
-        traj = rollout(policy, env, task, cfg, memory_text=memory_text)
-        log.log_rollout(**rollout_record(traj, ids, extra_seconds=secs))
-        trajs.append(traj)
+def contexts_for(methods, env: Env, tasks: list[Task]) -> list:
+    """Every method's addition to each task's prompt, merged. Built once per task, never per attempt."""
+    from rsi.base import merge
+    return [merge([m.context(t, env) for m in methods]) for t in tasks]
+
+
+def run_tasks(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, methods=(), **fields) -> list:
+    """Roll out each task once in one lockstep batch, read-only on every method, logging every rollout as cost."""
+    contexts, secs = timed(contexts_for, methods, env, tasks)
+    trajs = rollout_group(policy, env, tasks, cfg, contexts)
+    for traj in trajs:
+        log.log_rollout(**rollout_record(traj, extra_seconds=secs / max(len(trajs), 1), key=env.task_key(traj.task)),
+                        **fields)
     return trajs
 
 
-def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *, store=None,
+def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *, methods=(),
              final: bool = False) -> EvalResult:
     trained_goals = {(r.get("family"), tuple(r.get("goal", ()))) for r in log.records("rollout")
                      if r.get("split") == "train"}
-    trajs = run_tasks(policy, env, tasks, log, cfg, store)
+    trajs = run_tasks(policy, env, tasks, log, cfg, methods)
     won = [float(t.total_reward >= 1.0) for t in trajs]
     seen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) in trained_goals]
     unseen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) not in trained_goals]
+    by_key: dict[str, list[float]] = {}
+    for w, t in zip(won, trajs):
+        by_key.setdefault(env.task_key(t.task), []).append(w)
     turns = sum(len(t.steps) for t in trajs)
     split = tasks[0].split if tasks else "heldout"
     result = EvalResult(split, len(trajs), _rate(won), _rate(seen), _rate(unseen),
                         sum(t.parse_fails for t in trajs) / turns if turns else 0.0, log.cumulative_cost)
     log.log_eval(split=result.split, n=result.n, success_rate=result.success_rate,
                  unseen_seed_rate=result.unseen_seed_rate, unseen_goal_rate=result.unseen_goal_rate,
-                 n_unseen_seed=len(seen), n_unseen_goal=len(unseen),
+                 n_unseen_seed=len(seen), n_unseen_goal=len(unseen), by_key={k: _rate(v) for k, v in by_key.items()},
                  parse_fail_rate=result.parse_fail_rate, cost=result.cost, final=final)
     return result
 
 
-def make_eval_fn(policy, env: Env, log: Trace, cfg: LoopConfig, store=None):
+def make_eval_fn(policy, env: Env, log: Trace, cfg: LoopConfig, methods=()):
     """The gate's measuring stick: tasks -> (success_rate, parse_fail_rate). Gate rollouts count as cost too."""
     def eval_fn(tasks: list[Task]) -> tuple[float, float]:
-        trajs = run_tasks(policy, env, tasks, log, cfg, store)
+        trajs = run_tasks(policy, env, tasks, log, cfg, methods)
         turns = sum(len(t.steps) for t in trajs)
         return (_rate([float(t.total_reward >= 1.0) for t in trajs]),
                 sum(t.parse_fails for t in trajs) / turns if turns else 0.0)

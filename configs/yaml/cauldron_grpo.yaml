@@ -3,8 +3,8 @@
 env: cauldron
 cauldron_subset: sample_1pct
 judge: outcome
-update: grpo
-curriculum: frontier
+methods: [grpo]
+planner: frontier
 iters: 100
 tasks_per_iter: 8
 group_size: 8

@@ -5,7 +5,7 @@ from configs.config import LoopConfig
 from envs.base import Task
 from rsi.memory import SkillStore
 from tests.conftest import ScriptedPolicy, fake_embed
-from rsi import make_update
+from rsi import make_method
 from rsi.memory import Memory
 from utils.rollout import Trajectory
 from rsi.judges import ScoredTrajectory
@@ -64,11 +64,11 @@ def test_commit_then_revert_restores_store(store, tmp_path):
     assert path.read_bytes() == before and len(store) == 0
 
 
-def test_make_update_memory_builds_store_in_run_dir(tmp_path):
-    up = make_update(LoopConfig(update="memory", run_dir=str(tmp_path)), ScriptedPolicy([]))
+def test_make_method_memory_builds_store_in_run_dir(tmp_path):
+    up = make_method("memory", LoopConfig(run_dir=str(tmp_path)), ScriptedPolicy([]))
     assert isinstance(up, Memory) and up.store.path.startswith(str(tmp_path))
 
 
-def test_unknown_update_mode_is_rejected(tmp_path):
+def test_unknown_method_is_rejected(tmp_path):
     with pytest.raises(ValueError):
-        make_update(LoopConfig(update="scaffold", run_dir=str(tmp_path)), ScriptedPolicy([]))
+        make_method("scaffold", LoopConfig(run_dir=str(tmp_path)), ScriptedPolicy([]))

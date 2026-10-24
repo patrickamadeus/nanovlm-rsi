@@ -19,6 +19,7 @@ class PolicyConfig:
     scaffold_path: str = "utils/scaffold.txt"
     image_side: int = 512          # one 512px tile; the processor default turns a 64px frame into 17 tiles
     stop_at_newline: bool = True   # the action is one line; generating past it is wasted compute
+    batch_size: int = 64           # act_batch: prompts per generate call
     response_prefix: str = "ACT:"  # prefilled assistant turn: 39/40 parseable vs 4/40 without, for a 256M model
 
 
@@ -26,9 +27,10 @@ class PolicyConfig:
 class LoopConfig:
     # what runs: one choice per folder
     env: str = "static"            # envs/:    "static" | "frozenlake" | "sokoban" | "craftax" | "cauldron"
-    judge: str = "outcome"         # judges/:  "outcome" | "vlm" | "composite"
-    update: str = "grpo"           # rsi/:     "grpo" | "memory"  — exactly one per run
-    curriculum: str = "uniform"    # rsi/:     "uniform" | "frontier"
+    judge: str = "outcome"         # rsi/judges.py: "outcome" | "vlm" | "composite"
+    methods: tuple[str, ...] = ("grpo",)      # rsi/<name>.py, any combination: "grpo" | "memory" | ...
+    planner: str = "uniform"       # which tasks to practise: "uniform" | "frontier" | ...
+    update_planner: str = "all"    # which methods update each iteration: "all" | ...
 
     iters: int = 20
     tasks_per_iter: int = 4
@@ -76,7 +78,7 @@ class LoopConfig:
     mem_max_size: int = 500
     mem_dedupe_sim: float = 0.95
 
-    # rsi/curriculum.py (frontier)
+    # rsi/curriculum.py (the frontier planner)
     curriculum_pool: int = 8       # candidates drawn per task returned
     curriculum_epsilon: float = 0.1
     frontier_band: tuple[float, float] = (0.2, 0.8)   # where a GRPO group carries signal

@@ -2,5 +2,5 @@
 
 
 def make_policy(policy_cfg):
-    from models.smolvlm import Policy        # any HF image-text-to-text model; LoRA targets SmolVLM's names
+    from models.vlm import Policy        # any HF image-text-to-text model; LoRA targets SmolVLM's names
     return Policy(policy_cfg)

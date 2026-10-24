@@ -48,7 +48,7 @@ IMG = np.zeros((64, 64, 3), np.uint8)
 
 @pytest.fixture
 def setup(tmp_path):
-    from models.smolvlm import Policy
+    from models.vlm import Policy
     policy = Policy(PolicyConfig(tiny=True, device="cpu", dtype="float32", max_new_tokens=6))
     cfg = LoopConfig(run_dir=str(tmp_path), grpo_lr=5e-2, grpo_beta=0.0)
     return policy, GRPO(policy, cfg), cfg
@@ -58,7 +58,7 @@ def _traj(policy, task, reward, prompt="count the squares", token_ids=None):
     if token_ids is None:
         token_ids = policy.act(prompt, [IMG]).token_ids
     logprobs = policy.logprobs(prompt, [IMG], token_ids).detach().cpu().numpy()
-    s = {"action": "3", "obs_text": prompt, "prompt": prompt, "rgb": IMG,
+    s = {"action": "3", "obs_text": prompt, "prompt": prompt, "images": [IMG],
          "token_ids": token_ids, "logprobs": logprobs}
     t = Trajectory(task, [s], reward, 1, 0, len(token_ids))
     return ScoredTrajectory(t, reward, None, "outcome", 1.0, ())
@@ -115,3 +115,27 @@ def test_commit_persists_and_revert_restores_exactly(setup):
     for n, v in policy.snapshot().items():
         torch.testing.assert_close(v, snap[n])
     assert not up.persisted(u)             # what is on disk is the pre-update state again
+
+
+def test_pi_old_is_the_current_policy_when_the_weights_have_not_moved():
+    from rsi.weights import old_logprobs
+
+    class P:
+        version = 3
+    lp_new = torch.tensor([-1.0, -2.0], requires_grad=True)
+    on = old_logprobs(P(), {"policy_version": 3, "logprobs": np.array([-9.0, -9.0])}, lp_new)
+    off = old_logprobs(P(), {"policy_version": 2, "logprobs": np.array([-9.0, -9.0])}, lp_new)
+    assert torch.equal(on, lp_new.detach()) and not on.requires_grad          # ratio exactly 1
+    assert torch.equal(off, torch.tensor([-9.0, -9.0]))                         # stale samples keep their pi_old
+
+
+def test_commit_and_revert_move_the_policy_version(setup):
+    policy, grpo, cfg = setup
+    task = Task("count_objects", 2, ("3",), 1, "train")
+    batch = [_traj(policy, task, r) for r in (1.0, 0.0, 1.0, 0.0)]
+    v = policy.version
+    u = grpo.propose(batch)
+    grpo.commit(u)
+    assert policy.version == v + 1
+    grpo.revert(u)
+    assert policy.version == v + 2

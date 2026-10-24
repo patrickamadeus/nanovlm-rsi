@@ -1,8 +1,8 @@
 """picoRSI: the self-improvement loop. Read this file first.
 
-    curriculum picks tasks -> harness rolls out a group per task -> judge scores them
-        -> update mode proposes a change -> gate commits or reverts it -> log everything
-        -> evaluate on held-out tasks every eval_every iterations
+    planner picks tasks -> each method adds context -> a group of attempts per task, in one batch
+        -> judge scores them -> methods reshape the signal -> each updating method proposes a change,
+        and the gate keeps or undoes it -> methods and planner observe -> held-out eval every eval_every
 
     python train.py --config count_grpo            # the headline run
     python train.py --config tiny                  # CPU smoke run, ~1 min
@@ -17,61 +17,70 @@ import numpy as np
 
 from configs.config import LoopConfig, load_config
 from envs import make_env
-from evaluate import EvalResult, evaluate, make_eval_fn
-from utils.log import Trace
-from utils.rollout import recall, rollout, rollout_record
-from rsi import make_judge
+from evaluate import EvalResult, contexts_for, evaluate, make_eval_fn
 from models import make_policy
-from rsi import make_update
-from rsi.curriculum import make_curriculum
+from rsi import make_judge, make_methods, make_planner, make_update_planner
 from rsi.gate import gate
+from utils.log import Trace
+from utils.rollout import rollout_group, rollout_record, timed
 
 
 def train(cfg: LoopConfig, policy=None) -> EvalResult:
     check_run_dir(cfg)
-    policy     = policy or make_policy(cfg.policy)
-    env        = make_env(cfg)
-    judge      = make_judge(cfg, env)
-    updater    = make_update(cfg, policy)                     # grpo | memory
-    curriculum = make_curriculum(env, cfg)
-    log        = Trace(cfg.run_dir)
-    store      = getattr(updater, "store", None)              # only memory has one
-    heldout    = env.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed))   # frozen per env_seed
-    log.log_run(cfg_hash=cfg.hash(), git_sha=git_sha(), update=cfg.update, curriculum=cfg.curriculum,
-                judge=cfg.judge, env=cfg.env, gate_enabled=cfg.gate_enabled, config=asdict(cfg))
+    policy   = policy or make_policy(cfg.policy)
+    env      = make_env(cfg)
+    log      = Trace(cfg.run_dir)
+    judge    = make_judge(cfg, env)
+    methods  = make_methods(cfg, policy, env)                # grpo, memory, ... in config order
+    planner  = make_planner(env, cfg, log)                   # which tasks
+    chooser  = make_update_planner(cfg, [m.name for m in methods if m.changes])   # which methods update
+    heldout  = env.tasks("heldout", cfg.eval_n, np.random.default_rng(cfg.seed))   # frozen per env_seed
+    eval_fn  = make_eval_fn(policy, env, log, cfg, methods)
+    log.log_run(cfg_hash=cfg.hash(), git_sha=git_sha(), methods=list(cfg.methods), planner=cfg.planner,
+                update_planner=cfg.update_planner, judge=cfg.judge, env=cfg.env, gate_enabled=cfg.gate_enabled,
+                config=asdict(cfg))
 
     for it in range(cfg.iters):
-        if it % cfg.eval_every == 0:                          # it == 0 is the pre-RSI baseline
-            evaluate(policy, env, heldout, log, cfg, store=store)
+        if it % cfg.eval_every == 0:                         # it == 0 is the pre-RSI baseline
+            evaluate(policy, env, heldout, log, cfg, methods=methods)
 
+        tasks = planner.tasks(cfg.tasks_per_iter)            # train split only
+        contexts, ctx_s = timed(contexts_for, methods, env, tasks)
+        group = [t for t in tasks for _ in range(cfg.group_size)]
+        trajs = rollout_group(policy, env, group, cfg, [c for c in contexts for _ in range(cfg.group_size)])
         batch = []
-        for task in curriculum(policy, log):                  # train split only
-            memory_text, skill_ids, recall_s = recall(store, env, task, cfg.mem_top_k)   # once per task
-            for g in range(cfg.group_size):                   # GRPO needs a group; memory just gets more tries
-                traj = rollout(policy, env, task, cfg, memory_text=memory_text)
-                scored = judge.score(traj)
-                log.log_rollout(**rollout_record(traj, skill_ids, scored.verdict_source,
-                                                 extra_seconds=recall_s if g == 0 else 0.0),
-                                flags=scored.flags, iter=it, judge_verdict=scored.judge_verdict,
-                                judge_tokens=scored.judge_tokens)
-                if store is not None:                         # use-attribution: was the skill there when it worked?
-                    store.note_use(skill_ids, succeeded=scored.reward >= 1.0)
-                batch.append(scored)
+        for traj in trajs:
+            scored = judge.score(traj)
+            log.log_rollout(**rollout_record(traj, scored.verdict_source, ctx_s / len(trajs), env.task_key(traj.task)),
+                            flags=scored.flags, iter=it, judge_verdict=scored.judge_verdict,
+                            judge_tokens=scored.judge_tokens)
+            batch.append(scored)
+        for m in methods:                                    # hindsight, skill rewards: reshape before anyone learns
+            batch = m.signal(batch, env)
 
-        update = updater.propose(batch)
-        stats = getattr(curriculum, "last_stats", None)
-        if update is None:
-            log.log_update(iter=it, committed=False, gate_enabled=cfg.gate_enabled, reason="no usable signal",
-                           curriculum_stats=stats)
-            continue
-        result = gate(update, updater, env, cfg, eval_fn=make_eval_fn(policy, env, log, cfg, store))
-        log.log_update(iter=it, mode=update.mode, signal=update.signal, cost=update.cost,
-                       provenance=list(update.provenance), committed=result.passed,
-                       gate_enabled=result.gate_enabled, conditions=result.conditions, reason=result.reason,
-                       gate_before=result.before, gate_after=result.after, curriculum_stats=stats,
-                       **{k: v for k, v in update.payload.items() if isinstance(v, (int, float))})
+        results, before = {}, None                           # each update is gated on its own
+        names = chooser.updates([m.name for m in methods if m.changes])
+        for m in (m for m in methods if m.name in names):
+            update = m.propose(batch)
+            stats = getattr(planner, "last_stats", None)
+            if update is None:
+                log.log_update(iter=it, method=m.name, committed=False, gate_enabled=cfg.gate_enabled,
+                               reason="no usable signal", planner_stats=stats)
+                continue
+            result = gate(update, m, env, cfg, eval_fn=eval_fn, before=before)
+            before = result.after if result.passed else result.before    # the next gate starts from here
+            results[m.name] = result
+            log.log_update(iter=it, method=m.name, mode=update.mode, changes=m.changes, signal=update.signal,
+                           cost=update.cost, provenance=list(update.provenance), committed=result.passed,
+                           gate_enabled=result.gate_enabled, conditions=result.conditions, reason=result.reason,
+                           gate_before=result.before, gate_after=result.after, planner_stats=stats,
+                           **{k: v for k, v in update.payload.items() if isinstance(v, (int, float))})
+        for m in methods:
+            m.observe(batch)
+        planner.observe(batch, results)
+        chooser.observe(batch, results)
 
-    return evaluate(policy, env, heldout, log, cfg, store=store, final=True)
+    return evaluate(policy, env, heldout, log, cfg, methods=methods, final=True)
 
 
 def check_run_dir(cfg: LoopConfig) -> None:

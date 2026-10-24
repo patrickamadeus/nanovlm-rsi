@@ -29,8 +29,12 @@ class LoRALinear(nn.Module):
 
 
 def apply_lora(model: nn.Module, r: int = 8, alpha: float = 16, targets: tuple[str, ...] = ("q_proj", "v_proj"),
-               scope: str = "text_model") -> list[str]:
-    """Wrap the language model's attention projections. The vision tower stays frozen and untouched."""
+               scope: str | None = None) -> list[str]:
+    """Wrap the language model's attention projections. The vision tower stays frozen and untouched.
+    The language model is `text_model` in SmolVLM and `language_model` in Qwen-VL; None picks whichever exists."""
+    if scope is None:
+        names = [n for n, _ in model.named_modules()]
+        scope = next((s for s in ("text_model", "language_model") if any(s in n for n in names)), "")
     wrapped = []
     for name, module in list(model.named_modules()):
         for child_name, child in list(module.named_children()):

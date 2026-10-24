@@ -49,7 +49,7 @@ train.py        the loop, top to bottom, with every part plugged in
 evaluate.py     held-out success on our tasks + standard benchmarks via lmms-eval
 generate.py     watch the policy act on one task, step by step
 configs/        config.py (every knob) + yaml/ (one file per experiment)
-models/         smolvlm.py (the policy: act / logprobs / embed), lora.py (from scratch)
+models/         vlm.py (the policy: act / logprobs / embed), lora.py (from scratch)
 envs/           static.py (numpy count & gather tasks, CPU), cauldron.py (real VQA), craftax.py (open-world)
 rsi/            grpo.py, memory.py (what changes), curriculum.py (what to practice),
                 judges.py (how it's scored), gate.py (what is kept)

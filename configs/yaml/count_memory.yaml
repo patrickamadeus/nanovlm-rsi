@@ -2,8 +2,8 @@
 env: static
 static_families: [count_objects]
 judge: outcome
-update: memory
-curriculum: frontier
+methods: [memory]
+planner: frontier
 iters: 30
 tasks_per_iter: 8
 group_size: 4
