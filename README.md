@@ -78,7 +78,7 @@ python train.py --config count_grpo --iters 10 --run_dir runs/short    # any fie
 ```
 
 Configs live in `configs/yaml/`: `tiny` (CPU smoke), `count_grpo`, `count_memory`, `cauldron_grpo`,
-`craftax`. The GPU configs fit one 24 GB card (SmolVLM-256M in bf16, LoRA r=8) and take about an
+`craftax`. The GPU configs were run on one 48 GB A40 (SmolVLM-256M in bf16, LoRA r=8) and take about an
 hour on an A40.
 
 Outputs in `run_dir`: `trace.jsonl` (every rollout, update and eval, with cumulative cost and the
