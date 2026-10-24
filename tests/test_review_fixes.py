@@ -170,7 +170,7 @@ def test_grpo_group_statistics_skip_flagged_rows():
     def sc(r, flags=()):
         return ScoredTrajectory(Trajectory(t, [], r, 1, 0, 1), r, None, "outcome", 1.0, flags)
     g = GRPO.__new__(GRPO)
-    assert g.backward([sc(1.0, ("action_loop",)), sc(0.0), sc(0.0)]) is None   # only a flagged win: no real signal
+    assert g.prepare([sc(1.0, ("action_loop",)), sc(0.0), sc(0.0)]) is None   # only a flagged win: no real signal
 
 
 def test_generated_text_cannot_smuggle_image_placeholders():
