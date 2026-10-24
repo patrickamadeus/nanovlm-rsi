@@ -44,4 +44,8 @@ def parse_action(text: str, legal: list[str]) -> str | None:
     if not found:
         return None
     action = found[-1].strip().rstrip(".,;")
-    return action if action in legal else None
+    if action in legal:
+        return action
+    bare = action.strip("<>[]\"'`*").rstrip(".,;").lower()      # "Up", "<up>", "'up'." mean up
+    by_lower = {a.lower(): a for a in reversed(legal)}
+    return by_lower.get(bare)

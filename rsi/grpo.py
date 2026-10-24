@@ -50,21 +50,20 @@ class GRPO(WeightMethod):
         kept = [(s, a) for s, a in zip(batch, adv) if not np.isnan(a) and not s.flags]
         if not kept:
             return None
-        n_tokens = sum(len(st["token_ids"]) for s, _ in kept for st in s.traj.steps)
+        items = [(st, float(a)) for s, a in kept for st in s.traj.steps if st["token_ids"]]
+        n_tokens = sum(len(st["token_ids"]) for st, _ in items)
         total = 0.0
-        for s, a in kept:
-            for st in s.traj.steps:
-                if not st["token_ids"]:
-                    continue
-                lp_new = self.policy.logprobs(st["prompt"], st["images"], st["token_ids"])
-                lp_ref = None
-                if self.cfg.grpo_beta > 0:
-                    with torch.no_grad():
-                        lp_ref = self.policy.reference_logprobs(st["prompt"], st["images"], st["token_ids"])
-                loss = grpo_token_loss(lp_new, old_logprobs(self.policy, st, lp_new), lp_ref, adv=float(a),
-                                       clip=self.cfg.grpo_clip, beta=self.cfg.grpo_beta).sum() / n_tokens
-                loss.backward()                     # one step at a time keeps activation memory to one forward
-                total += loss.item()
+        for i in range(0, len(items), self.cfg.micro_batch):     # a few turns per forward pass
+            chunk = items[i:i + self.cfg.micro_batch]
+            args = ([st["prompt"] for st, _ in chunk], [st["images"] for st, _ in chunk],
+                    [st["token_ids"] for st, _ in chunk])
+            lps = self.policy.logprobs_batch(*args)
+            refs = self.policy.reference_logprobs_batch(*args) if self.cfg.grpo_beta > 0 else [None] * len(chunk)
+            loss = sum(grpo_token_loss(lp, old_logprobs(self.policy, st, lp), ref, adv=a, clip=self.cfg.grpo_clip,
+                                       beta=self.cfg.grpo_beta).sum() for (st, a), lp, ref in zip(chunk, lps, refs))
+            loss = loss / n_tokens
+            loss.backward()
+            total += loss.item()
         n_groups = len(set(keys))
         return {"used": [s for s, _ in kept], "loss": total, "n_tokens": n_tokens,
                 "discarded_groups": 1 - len({k for k, a in zip(keys, adv) if not np.isnan(a)}) / n_groups}

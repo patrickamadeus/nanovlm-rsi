@@ -11,6 +11,8 @@ import os
 
 import numpy as np
 
+WEIGHT_METHODS = {"grpo"}             # they share one set of LoRA adapters; the rest change memory or signals
+
 
 def make_methods(cfg, policy, env=None) -> list:
     shared = {}
@@ -31,10 +33,17 @@ def make_method(name: str, cfg, policy, env=None, shared: dict | None = None):
         return GRPO(policy, cfg, weights())
     if name == "memory":
         from rsi.memory import Memory, SkillStore
-        store = SkillStore(os.path.join(cfg.run_dir, "skills.jsonl"), embed_fn=lambda text: policy.embed(text, []),
-                           max_size=cfg.mem_max_size, dedupe_sim=cfg.mem_dedupe_sim)
-        return Memory(store, cfg)
+        return Memory(skill_store(cfg, policy), cfg, env, policy)
+    if name == "viskill":
+        from rsi.viskill import ViSkill
+        return ViSkill(skill_store(cfg, policy), cfg, env, policy)
     raise ValueError(f"unknown method {name!r}")
+
+
+def skill_store(cfg, policy):
+    from rsi.memory import SkillStore
+    return SkillStore(os.path.join(cfg.run_dir, "skills.jsonl"), embed_fn=lambda text: policy.embed(text, []),
+                      max_size=cfg.mem_max_size, dedupe_sim=cfg.mem_dedupe_sim)
 
 
 def make_planner(env, cfg, log=None):

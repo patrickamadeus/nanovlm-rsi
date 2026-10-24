@@ -69,6 +69,7 @@ class LoopConfig:
     grpo_clip: float = 0.2
     grpo_beta: float = 0.04        # KL-to-init coefficient; 0 disables the reference pass
     grpo_max_grad_norm: float = 1.0
+    micro_batch: int = 8           # turns per training forward pass (every weight method)
     lora_r: int = 8
     lora_alpha: float = 16
 
@@ -77,6 +78,11 @@ class LoopConfig:
     mem_top_k: int = 3
     mem_max_size: int = 500
     mem_dedupe_sim: float = 0.95
+    mem_retrieve_alpha: float = 1.0   # score = alpha * similarity + (1 - alpha) * utility; ViSkill uses 0.9
+    mem_retrieve_min: float = -1.0    # skills scoring below this are not shown; ViSkill uses 0.8
+    mem_max_excess_steps: int = -1    # admit a success only within this many steps of the solver; -1 = any length
+    skill_format: str = "action"      # what a skill shows: action | text | text+action | visual | text+visual
+    viskill_lambda: float = 0.8       # rsi/viskill.py: weight of the skill-following reward on failures
 
     # rsi/curriculum.py (the frontier planner)
     curriculum_pool: int = 8       # candidates drawn per task returned

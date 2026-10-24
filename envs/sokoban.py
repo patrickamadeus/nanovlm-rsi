@@ -140,6 +140,7 @@ def render(size: int, walls: frozenset, targets: frozenset, boxes: frozenset, pl
 
 class SokobanEnv(SeededTasks, Env):
     families = {"sokoban"}
+    cell_px = CELL
 
     def __init__(self, env_seed: int = 0, heldout_n: int = 200, levels: tuple[tuple[int, int], ...] = ((6, 1),)):
         self.env_seed, self.heldout_n, self.levels = env_seed, heldout_n, parse_levels(levels)

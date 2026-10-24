@@ -72,6 +72,7 @@ def render(size: int, holes: frozenset, goal: tuple[int, int], agent: tuple[int,
 
 class FrozenLakeEnv(SeededTasks, Env):
     families = {"frozenlake"}
+    cell_px = CELL                   # lets a skill card draw the path (rsi/viskill.py)
 
     def __init__(self, env_seed: int = 0, heldout_n: int = 200, levels: tuple[tuple[int, int], ...] = ((4, 3),)):
         self.env_seed, self.heldout_n, self.levels = env_seed, heldout_n, parse_levels(levels)

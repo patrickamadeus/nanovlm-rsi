@@ -90,7 +90,10 @@ def load_run(run_dir: str, **policy_overrides):
 
     from models import make_policy
     run = Trace(run_dir).records("run")[0]
-    cfg = load_config(None, **{k: v for k, v in run["config"].items() if k != "policy"}, policy=run["config"]["policy"])
+    saved = {k: v for k, v in run["config"].items() if k != "policy"}
+    if "update" in saved:                     # runs from before methods/planner replaced update/curriculum
+        saved["methods"], saved["planner"] = [saved.pop("update")], saved.pop("curriculum", "uniform")
+    cfg = load_config(None, **saved, policy=run["config"]["policy"])
     policy = make_policy(replace(cfg.policy, **policy_overrides))
     weights = os.path.join(run_dir, "weights.safetensors")
     if os.path.exists(weights):
@@ -106,23 +109,35 @@ BENCHMARK_POLICY = dict(image_side=0, response_prefix="", stop_at_newline=False)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--run", help="a finished run directory; omit to evaluate the untrained base model")
+    ap.add_argument("--run", help="a finished run directory; omit to evaluate an untrained model")
+    ap.add_argument("--config", help="without --run: the env and settings to evaluate on (a configs/yaml name)")
+    ap.add_argument("--model", help="without --run: a HF model id, or 'random' for the random-action baseline")
+    ap.add_argument("--out", help="where to write the eval trace (default: <run>/eval or runs/base)")
     ap.add_argument("--split", default="heldout", choices=["heldout", "gate"])
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--benchmarks", help="comma-separated lmms-eval tasks, e.g. mmstar")
     ap.add_argument("--limit", type=int, help="lmms-eval items per task (debug only)")
     args = ap.parse_args()
 
+    from dataclasses import replace
+
     overrides = BENCHMARK_POLICY if args.benchmarks else {}
+    methods = []
     if args.run:
         cfg, policy = load_run(args.run, **overrides)
+        from rsi import WEIGHT_METHODS, make_method
+        run_cfg = replace(cfg, run_dir=args.run, resume=True)            # memory is read from the run, never written
+        methods = [make_method(m, run_cfg, policy) for m in cfg.methods if m not in WEIGHT_METHODS]
     else:
-        from dataclasses import replace
-
-        from models import make_policy
-        cfg = LoopConfig()
-        policy = make_policy(replace(cfg.policy, **overrides))
-    out = os.path.join(args.run or "runs/base", "eval")
+        cfg = load_config(args.config, heldout_n=max(args.n, LoopConfig.heldout_n))
+        if args.model == "random":
+            from models.baselines import RandomPolicy
+            policy = RandomPolicy(cfg.seed)
+        else:
+            from models import make_policy
+            policy_cfg = replace(cfg.policy, **({"model_id": args.model} if args.model else {}), **overrides)
+            policy = make_policy(policy_cfg)
+    out = args.out or os.path.join(args.run or "runs/base", "eval")
 
     if args.benchmarks:
         from utils.lmms import run_benchmarks
@@ -135,7 +150,7 @@ def main():
     from envs import make_env
     env = make_env(cfg)
     r = evaluate(policy, env, env.tasks(args.split, args.n, np.random.default_rng(cfg.seed)), Trace(out), cfg,
-                 final=True)
+                 methods=methods, final=True)
     print(f"{'split':<10}{'n':>5}{'success':>10}{'unseen_seed':>13}{'unseen_goal':>13}{'parse_fail':>12}")
     print(f"{r.split:<10}{r.n:>5}{r.success_rate:>10.3f}{r.unseen_seed_rate:>13.3f}{r.unseen_goal_rate:>13.3f}"
           f"{r.parse_fail_rate:>12.3f}")

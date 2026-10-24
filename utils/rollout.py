@@ -90,7 +90,7 @@ def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
             r["env_steps"] += 1
             r["total"] += reward
             r["done"] = done
-            r["steps"].append({"action": action, "reward": reward, "shaping": 0.0,
+            r["steps"].append({"action": action, "reward": reward, "shaping": 0.0, "pos": info.get("pos"),
                                "events": list(info.get("events", [])), **replay})
     wall = (time.perf_counter() - t_start) * 1000 / max(len(rows), 1)
     return [Trajectory(r["task"], r["steps"], r["total"], r["env_steps"], r["fails"], r["tout"], r["tin"],

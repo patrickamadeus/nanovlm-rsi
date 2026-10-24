@@ -40,3 +40,13 @@ def test_render_fills_slots_and_empty_memory_is_clean():
 def test_shipped_scaffold_loads_from_any_working_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     validate_scaffold(load_scaffold("utils/scaffold.txt"))
+
+
+def test_parse_forgives_case_and_wrapping_but_not_prose():
+    from utils.prompt import parse_action
+    legal = ["up", "down", "left", "right"]
+    assert parse_action("ACT: Up", legal) == "up"
+    assert parse_action("ACT: <left>", legal) == "left"
+    assert parse_action('ACT: "right".', legal) == "right"
+    assert parse_action("ACT: go right", legal) is None            # an action, not a sentence
+    assert parse_action("ACT: Yes", ["yes", "no", "Yes"]) == "Yes"  # an exact legal spelling wins

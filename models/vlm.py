@@ -98,6 +98,17 @@ class Policy:
         finally:
             self.model = model
 
+    @torch.no_grad()
+    def reference_logprobs_batch(self, prompts, images, token_ids) -> list[torch.Tensor]:
+        if self.mode == "lora":
+            with adapters_disabled(self.model):
+                return self.logprobs_batch(prompts, images, token_ids)
+        model, self.model = self.model, self.reference
+        try:
+            return self.logprobs_batch(prompts, images, token_ids)
+        finally:
+            self.model = model
+
     def _format(self, prompt: str, n_images: int, prefix: str | None = None) -> str:
         """Wrap the rendered scaffold as one user turn in the model's chat template, then prefill the reply."""
         prompt = IMAGE * max(n_images - prompt.count(IMAGE), 0) + prompt
@@ -216,6 +227,16 @@ class Policy:
                  prefix: str | None = None) -> torch.Tensor:
         """Re-score an existing completion under current params; differentiable when params require grad."""
         return self._score(self._inputs(prompt, images, prefix=prefix), token_ids)
+
+    def logprobs_batch(self, prompts: list[str], images: list[list[np.ndarray]], token_ids: list[list[int]],
+                       prefix: str | None = None) -> list[torch.Tensor]:
+        """logprobs() for several completions in one forward pass; differentiable. Training uses this."""
+        texts = [self._format(p, len(im), prefix) for p, im in zip(prompts, images)]
+        pil = [[Image.fromarray(x) for x in im] for im in images]
+        batch = self.processor(text=texts, images=pil if any(pil) else None, padding=True, return_tensors="pt")
+        batch = {k: (v.to(self.device, self.model.dtype) if v.is_floating_point() else v.to(self.device))
+                 for k, v in batch.items()}
+        return self._score_batch(batch, token_ids)
 
     def _score(self, inputs: dict, token_ids: list[int]) -> torch.Tensor:
         inputs = dict(inputs)

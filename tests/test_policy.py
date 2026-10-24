@@ -150,3 +150,18 @@ def test_a_completion_stops_at_its_first_stop_token(tiny):
 
 def test_image_placeholder_tokens_are_never_sampled(tiny):
     assert tiny.never                                   # found from the tokenizer, not a hard-coded model list
+
+
+def test_logprobs_batch_matches_one_at_a_time_and_carries_gradients(tiny):
+    prompts = ["hello", "a longer prompt here", "hi"]
+    images = [IMG, IMG, IMG + IMG]
+    ids = [tiny.act(p, im).token_ids for p, im in zip(prompts, images)]
+    batch = tiny.logprobs_batch(prompts, images, ids)
+    for p, im, t, lp in zip(prompts, images, ids, batch):
+        torch.testing.assert_close(lp.detach(), tiny.logprobs(p, im, t).detach(), rtol=1e-3, atol=1e-3)
+    p = next(tiny.model.parameters())
+    p.requires_grad_(True)
+    try:
+        assert tiny.logprobs_batch(prompts[:1], images[:1], ids[:1])[0].requires_grad
+    finally:
+        p.requires_grad_(False)
