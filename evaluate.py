@@ -11,9 +11,11 @@
 """
 import argparse
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import numpy as np
+import torch
 
 from configs.config import LoopConfig, load_config
 from envs.base import Env, Task
@@ -56,7 +58,8 @@ def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *
              final: bool = False) -> EvalResult:
     trained_goals = {(r.get("family"), tuple(r.get("goal", ()))) for r in log.records("rollout")
                      if r.get("split") == "train"}
-    trajs = run_tasks(policy, env, tasks, log, cfg, methods)
+    with paired_randomness(cfg.seed + 1):     # every held-out point of a run, and every run, sees the same draws
+        trajs = run_tasks(policy, env, tasks, log, cfg, methods)
     won = [float(t.total_reward >= 1.0) for t in trajs]
     seen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) in trained_goals]
     unseen = [w for w, t in zip(won, trajs) if (t.task.family, t.task.goal) not in trained_goals]
@@ -74,10 +77,27 @@ def evaluate(policy, env: Env, tasks: list[Task], log: Trace, cfg: LoopConfig, *
     return result
 
 
+@contextmanager
+def paired_randomness(seed: int):
+    """Sample with a fixed seed, then put the caller's random state back. The gate measures before and after
+    an update with the same draws, so the comparison sees the update rather than sampling noise, and the
+    training rollouts that follow are as random as if no evaluation had happened."""
+    cpu = torch.get_rng_state()
+    gpu = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    torch.manual_seed(seed)
+    try:
+        yield
+    finally:
+        torch.set_rng_state(cpu)
+        if gpu is not None:
+            torch.cuda.set_rng_state_all(gpu)
+
+
 def make_eval_fn(policy, env: Env, log: Trace, cfg: LoopConfig, methods=()):
     """The gate's measuring stick: tasks -> (success_rate, parse_fail_rate). Gate rollouts count as cost too."""
     def eval_fn(tasks: list[Task]) -> tuple[float, float]:
-        trajs = run_tasks(policy, env, tasks, log, cfg, methods)
+        with paired_randomness(cfg.seed):
+            trajs = run_tasks(policy, env, tasks, log, cfg, methods)
         turns = sum(len(t.steps) for t in trajs)
         return (_rate([float(t.total_reward >= 1.0) for t in trajs]),
                 sum(t.parse_fails for t in trajs) / turns if turns else 0.0)

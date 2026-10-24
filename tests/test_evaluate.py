@@ -69,3 +69,24 @@ def test_evaluate_shows_memory_to_the_policy_and_logs_success_per_task_key(trace
     evaluate(policy, env, GOAL3 + GOAL5, trace, LoopConfig(), methods=[Memory(store, LoopConfig())])
     assert all("Skills that worked before" in p for p in policy.prompts)
     assert trace.records("eval")[-1]["by_key"] == {"count_objects:3": 1.0, "count_objects:5": 0.0}
+
+
+def test_gate_evaluations_are_paired_and_leave_training_randomness_alone(trace):
+    import torch
+    draws = []
+
+    class Sampler(ScriptedPolicy):
+        def act(self, prompt, images, **kw):
+            draws.append(torch.rand(1).item())
+            return super().act(prompt, images)
+
+    fn = make_eval_fn(Sampler(iter(lambda: "ACT: 3", None)), env, trace, LoopConfig())
+    torch.manual_seed(123)
+    fn(GOAL3)
+    after_eval = torch.rand(1).item()
+    first = list(draws)
+    draws.clear()
+    fn(GOAL3)
+    assert draws == first                                   # before and after an update see the same draws
+    torch.manual_seed(123)
+    assert torch.rand(1).item() == after_eval               # and the training stream continues untouched

@@ -10,3 +10,5 @@ group_size: 8
 eval_n: 50
 heldout_n: 50
 run_dir: runs/craftax
+policy:
+  scaffold_path: utils/scaffold_agent.txt

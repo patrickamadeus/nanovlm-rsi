@@ -1,0 +1,6 @@
+{system}
+Actions available: {actions}
+{memory}
+Observation: <image>
+{task}
+Reply with one line: ACT: followed by exactly one of the available actions, nothing else.

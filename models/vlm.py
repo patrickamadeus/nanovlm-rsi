@@ -189,12 +189,14 @@ class Policy:
                     n = int(mask[i].sum())
                     out[i, :n] = v[i][mask[i]]
                 packed[k] = out
-        result = self.model(**packed, output_hidden_states=hidden)
-        logits = result.logits.float() / self.cfg.temperature
+        # only the last `keep` positions need logits: a full [batch, length, vocab] fp32 tensor is gigabytes
+        keep = width - min(int(m.sum()) for m in mask) + 1
+        result = self.model(**packed, output_hidden_states=hidden, logits_to_keep=keep)
+        logits, shift = result.logits, width - result.logits.shape[1]
         out, feats = [], []
         for i, c in enumerate(completions):
             n = int(mask[i].sum())
-            lp = F.log_softmax(logits[i, n - 1:n - 1 + len(c)], dim=-1)
+            lp = F.log_softmax(logits[i, n - 1 - shift:n - 1 - shift + len(c)].float() / self.cfg.temperature, dim=-1)
             out.append(lp.gather(-1, torch.tensor(c, device=self.device)[:, None])[:, 0])
             if hidden:
                 feats.append(result.hidden_states[-1][i, n - 1].detach().float())
