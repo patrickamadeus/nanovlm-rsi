@@ -70,6 +70,8 @@ class LoopConfig:
     grpo_beta: float = 0.04        # KL-to-init coefficient; 0 disables the reference pass
     grpo_max_grad_norm: float = 1.0
     micro_batch: int = 8           # turns per training forward pass (every weight method)
+    rest_lr: float = 1e-5          # rsi/rest.py: fine-tuning on its own successes
+    ppo_value_lr: float = 1e-3     # rsi/ppo.py: the value head (the policy uses grpo_lr and grpo_clip)
     lora_r: int = 8
     lora_alpha: float = 16
 
@@ -83,6 +85,8 @@ class LoopConfig:
     mem_max_excess_steps: int = -1    # admit a success only within this many steps of the solver; -1 = any length
     skill_format: str = "action"      # what a skill shows: action | text | text+action | visual | text+visual
     viskill_lambda: float = 0.8       # rsi/viskill.py: weight of the skill-following reward on failures
+    hindsight_per_task: int = 1       # rsi/hindsight.py: relabelled copies kept per task per iteration
+    expel_top_k: int = 5              # rsi/expel.py: rules shown in every prompt
 
     # rsi/curriculum.py (the frontier planner)
     curriculum_pool: int = 8       # candidates drawn per task returned

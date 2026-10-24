@@ -11,7 +11,7 @@ import os
 
 import numpy as np
 
-WEIGHT_METHODS = {"grpo"}             # they share one set of LoRA adapters; the rest change memory or signals
+WEIGHT_METHODS = {"grpo", "ppo", "rest"}             # they share one set of LoRA adapters; the rest change memory or signals
 
 
 def make_methods(cfg, policy, env=None) -> list:
@@ -31,9 +31,24 @@ def make_method(name: str, cfg, policy, env=None, shared: dict | None = None):
     if name == "grpo":
         from rsi.grpo import GRPO
         return GRPO(policy, cfg, weights())
+    if name == "ppo":
+        from rsi.ppo import PPO
+        return PPO(policy, cfg, weights())
+    if name == "rest":
+        from rsi.rest import ReST
+        return ReST(policy, cfg, weights())
     if name == "memory":
         from rsi.memory import Memory, SkillStore
         return Memory(skill_store(cfg, policy), cfg, env, policy)
+    if name == "hindsight":
+        from rsi.hindsight import Hindsight
+        return Hindsight(cfg)
+    if name == "expel":
+        from rsi.expel import ExpeL
+        return ExpeL(cfg, policy, cfg.run_dir)
+    if name == "reflexion":
+        from rsi.reflexion import Reflexion
+        return Reflexion(cfg, policy, env, lambda text: policy.embed(text, []))
     if name == "viskill":
         from rsi.viskill import ViSkill
         return ViSkill(skill_store(cfg, policy), cfg, env, policy)

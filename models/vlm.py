@@ -170,7 +170,7 @@ class Policy:
                 for ids, lp, n, t in zip(completions, lps, n_real,
                                          (tok.decode(c, skip_special_tokens=True) for c in completions))]
 
-    def _score_batch(self, batch: dict, completions: list[list[int]]) -> list[torch.Tensor]:
+    def _score_batch(self, batch: dict, completions: list[list[int]], hidden: bool = False):
         """Score each row's completion in one forward pass. The left-padded prompts are re-packed to start at
         position 0 with the completion right after and padding only at the end: causal attention never sees
         right padding, so each row is scored as if alone (up to bf16 kernel noise)."""
@@ -189,13 +189,16 @@ class Policy:
                     n = int(mask[i].sum())
                     out[i, :n] = v[i][mask[i]]
                 packed[k] = out
-        logits = self.model(**packed).logits.float() / self.cfg.temperature
-        out = []
+        result = self.model(**packed, output_hidden_states=hidden)
+        logits = result.logits.float() / self.cfg.temperature
+        out, feats = [], []
         for i, c in enumerate(completions):
             n = int(mask[i].sum())
             lp = F.log_softmax(logits[i, n - 1:n - 1 + len(c)], dim=-1)
             out.append(lp.gather(-1, torch.tensor(c, device=self.device)[:, None])[:, 0])
-        return out
+            if hidden:
+                feats.append(result.hidden_states[-1][i, n - 1].detach().float())
+        return (out, torch.stack(feats)) if hidden else out
 
     def _sampling(self, greedy: bool) -> dict:
         # top_k=0, top_p=1: the sampling distribution is exactly softmax(logits / T)
@@ -229,14 +232,15 @@ class Policy:
         return self._score(self._inputs(prompt, images, prefix=prefix), token_ids)
 
     def logprobs_batch(self, prompts: list[str], images: list[list[np.ndarray]], token_ids: list[list[int]],
-                       prefix: str | None = None) -> list[torch.Tensor]:
-        """logprobs() for several completions in one forward pass; differentiable. Training uses this."""
+                       prefix: str | None = None, hidden: bool = False):
+        """logprobs() for several completions in one forward pass; differentiable. Training uses this.
+        hidden=True also returns each row's last-prompt-token hidden state (detached): the state a value head reads."""
         texts = [self._format(p, len(im), prefix) for p, im in zip(prompts, images)]
         pil = [[Image.fromarray(x) for x in im] for im in images]
         batch = self.processor(text=texts, images=pil if any(pil) else None, padding=True, return_tensors="pt")
         batch = {k: (v.to(self.device, self.model.dtype) if v.is_floating_point() else v.to(self.device))
                  for k, v in batch.items()}
-        return self._score_batch(batch, token_ids)
+        return self._score_batch(batch, token_ids, hidden)
 
     def _score(self, inputs: dict, token_ids: list[int]) -> torch.Tensor:
         inputs = dict(inputs)

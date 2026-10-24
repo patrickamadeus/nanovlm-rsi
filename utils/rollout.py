@@ -26,6 +26,7 @@ class Trajectory:
     wall_ms: float = 0.0
     final_rgb: np.ndarray | None = None   # what a VLM judge looks at
     context_ids: tuple[str, ...] = ()     # memory items that were in the prompt, for use attribution
+    context: "Context | None" = None      # what the methods added to the prompt, so a replay can rebuild it
 
 
 def timed(fn, *args):
@@ -94,7 +95,29 @@ def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
                                "events": list(info.get("events", [])), **replay})
     wall = (time.perf_counter() - t_start) * 1000 / max(len(rows), 1)
     return [Trajectory(r["task"], r["steps"], r["total"], r["env_steps"], r["fails"], r["tout"], r["tin"],
-                       r["secs"], wall, r["obs"].rgb, tuple(r["ctx"].ids)) for r in rows]
+                       r["secs"], wall, r["obs"].rgb, tuple(r["ctx"].ids), r["ctx"]) for r in rows]
+
+
+def replay(env: Env, task: Task, steps: list[dict], cfg: LoopConfig, ctx: "Context | None" = None) -> Trajectory:
+    """Re-run already generated turns on (possibly another) task, without the policy: each turn keeps its
+    completion tokens and text, and gets the prompt and frame that task would have shown. Hindsight uses
+    this to turn a failed attempt into a success for the goal it did reach, with consistent images."""
+    ctx = ctx or Context()
+    template = load_scaffold(cfg.policy.scaffold_path)
+    e = env.fork()
+    obs, out, total = e.reset(task), [], 0.0
+    for st in steps:
+        prompt = render(template, system=SYSTEM, actions=e.actions, memory=ctx.text, task=obs.text or "")
+        images = [*ctx.images, obs.rgb]
+        seen = obs.text
+        obs, reward, done, info = e.step(st["action"])
+        total += reward
+        out.append({**st, "prompt": prompt, "images": images, "obs_text": seen, "reward": reward,
+                    "pos": info.get("pos"), "events": list(info.get("events", [])), "policy_version": -1})
+        if done:
+            break
+    return Trajectory(task, out, total, len(out), 0, sum(len(st["token_ids"]) for st in out), 0, 0.0, 0.0, obs.rgb,
+                      tuple(ctx.ids), ctx)
 
 
 def rollout(policy, env: Env, task: Task, cfg: LoopConfig, *, memory_text: str = "") -> Trajectory:

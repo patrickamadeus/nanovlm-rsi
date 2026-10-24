@@ -28,6 +28,7 @@ class ScoredTrajectory:
     flags: tuple[str, ...]     # reward-hacking and degeneracy tripwires
     judge_verdict: float | None = None    # sampled VLM opinion on a ground-truth task (agreement logging)
     judge_tokens: int = 0
+    origin: str = "attempt"    # "attempt" | "hindsight": a relabelled copy of a failed attempt (rsi/hindsight.py)
 
 
 def hack_flags(traj: Trajectory) -> tuple[str, ...]:
