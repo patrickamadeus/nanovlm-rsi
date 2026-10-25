@@ -42,7 +42,7 @@ def make_method(name: str, cfg, policy, env=None, shared: dict | None = None):
         return Memory(skill_store(cfg, policy, "skills.jsonl"), cfg, env, policy)
     if name == "hindsight":
         from rsi.hindsight import Hindsight
-        return Hindsight(cfg)
+        return Hindsight(cfg, getattr(getattr(policy, "processor", None), "tokenizer", None))
     if name == "expel":
         from rsi.expel import ExpeL
         return ExpeL(cfg, policy, cfg.run_dir)

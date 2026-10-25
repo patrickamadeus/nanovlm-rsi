@@ -56,3 +56,26 @@ def test_grpo_ignores_hindsight_copies(tmp_path):
     t, batch = _failure()
     copy = Hindsight(LoopConfig()).signal(batch, ENV)[1]
     assert g.prepare([copy, copy]) is None          # only relabelled copies: no attempts, no signal
+
+
+def test_with_reasoning_a_relabelled_turn_keeps_only_its_actions():
+    """The copy's goal moved, so the original reasoning about the old goal would be false: it is replaced by
+    a neutral thought (VAGEN's own fallback), and the tokens are rebuilt from the new text."""
+    from configs.config import PolicyConfig
+
+    class Tok:
+        def __call__(self, text, add_special_tokens=False):
+            from types import SimpleNamespace
+            return SimpleNamespace(input_ids=[ord(c) for c in text])
+
+    t, batch = _failure()
+    for st in batch[0].traj.steps:
+        st["text"] = "<think>The goal is far below me.</think><answer>Down</answer>"
+    cfg = LoopConfig(answer_format="answer", policy=PolicyConfig(prompt_path="prompts/frozenlake.txt"))
+    copy = Hindsight(cfg, tokenizer=Tok()).signal(batch, ENV)[1]
+    for st in copy.traj.steps:
+        assert st["text"] == f"<think>{NEUTRAL}</think><answer>{', '.join(a.capitalize() for a in st['actions'])}</answer>"
+        assert "".join(map(chr, st["token_ids"])) == st["text"] and st["logprobs"] is None
+
+
+from rsi.hindsight import NEUTRAL  # noqa: E402

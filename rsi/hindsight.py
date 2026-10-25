@@ -5,6 +5,11 @@ prompts and frames match the new goal, and the copy joins the batch as a success
 A signal-only method: it changes nothing itself. Learners that imitate successes use the copies (rsi/rest.py,
 the skill library in rsi/memory.py and rsi/viskill.py); GRPO skips them, because a copy would join its own
 original's group and fake an advantage. Put it before those methods in cfg.methods.
+
+With reasoning (answer_format "answer"), a copy's original thoughts are about the *old* goal, and training on
+them would teach reasoning that contradicts the image. So each relabelled turn keeps only its actions, under a
+neutral thought: "<think>Moving towards the goal.</think><answer>Down, Right</answer>", the same filler VAGEN
+uses for a turn without reasoning, with its tokens rebuilt from that text.
 """
 from dataclasses import replace
 
@@ -13,11 +18,23 @@ from rsi.judges import ScoredTrajectory
 from utils.rollout import moves, replay
 
 
+NEUTRAL = "Moving towards the goal."
+
+
 class Hindsight(Method):
     name = "hindsight"
 
-    def __init__(self, cfg):
-        self.cfg = cfg
+    def __init__(self, cfg, tokenizer=None):
+        self.cfg, self.tokenizer = cfg, tokenizer
+
+    def neutral(self, traj):
+        """Swap each turn's reasoning for NEUTRAL, keeping what it did."""
+        steps = []
+        for st in traj.steps:
+            text = f"<think>{NEUTRAL}</think><answer>{', '.join(a.capitalize() for a in st['actions'])}</answer>"
+            ids = self.tokenizer(text, add_special_tokens=False).input_ids
+            steps.append({**st, "text": text, "token_ids": ids, "logprobs": None})
+        return replace(traj, steps=steps, tokens_out=sum(len(st["token_ids"]) for st in steps))
 
     def signal(self, batch: list, env) -> list:
         extra, seen = [], set()
@@ -41,6 +58,8 @@ class Hindsight(Method):
                 n += len(st.get("actions") or [st["action"]])
             traj = replay(env, task, turns, self.cfg, s.traj.context)   # ends where the new goal is reached
             if traj.total_reward >= 1.0:
+                if self.cfg.answer_format == "answer":
+                    traj = self.neutral(traj)
                 seen.add(key)
                 extra.append(replace(s, traj=traj, reward=1.0, origin="hindsight", per_step_credit=None))
         return batch + extra
