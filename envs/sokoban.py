@@ -2,8 +2,12 @@
 
 A level is (size, boxes). Generation follows gym-sokoban: carve a room by random walk, put each box on
 its target, then play *backwards* (the player walks and may pull a box behind it), so every level is
-solvable by construction. BFS then gives the optimal length. A box pushed into a corner off its target
+solvable by construction, and no box may start on its target. BFS then gives the optimal length. A box pushed into a corner off its target
 can never move again, so that ends the episode early instead of wasting the rest of the budget.
+
+The reward is 1.0 for solving, so success reads the same in every env. gym-sokoban's dense reward
+(-0.1 per step, +1 / -1 for a box onto / off a target, +10 for solving), divided by 10 to match, is
+reported per step as info["shaping"]; the judge adds it, so GRPO sees progress short of a solve.
 
 The targets live in task.goal: hindsight relabelling moves them to where the boxes actually ended.
 """
@@ -108,7 +112,7 @@ def generate(seed: int, size: int, n_boxes: int) -> World:
             if behind in boxes and rng.random() < 0.8:
                 boxes = (boxes - {behind}) | {player}
             player = nxt
-        if boxes == targets or any(cornered(walls, b, targets) for b in boxes):
+        if boxes & targets or any(cornered(walls, b, targets) for b in boxes):
             continue
         path = solve_level(walls, player, boxes, targets)
         if path and len(path) >= 3:
@@ -173,10 +177,12 @@ class SokobanEnv(SeededTasks, Env):
         self._player, self._boxes = move(w.walls, self._player, self._boxes, action)
         solved = self._boxes == w.targets
         stuck = self._boxes != before and any(cornered(w.walls, b, w.targets) for b in self._boxes)
+        shaping = (-0.1 + len(self._boxes & w.targets) - len(before & w.targets)) / 10
         events = (["pushed"] if self._boxes != before else []) + (["solved"] if solved else []) + \
                  (["deadlock"] if stuck and not solved else [])
         done = solved or stuck or self._t >= self._task.budget
-        return self._obs(), float(solved), done, {"steps": self._t, "pos": self._player, "events": events}
+        return self._obs(), float(solved), done, {"steps": self._t, "pos": self._player, "events": events,
+                                                     "shaping": shaping}
 
     def _obs(self) -> Obs:
         w = self._world
@@ -208,13 +214,14 @@ class SokobanEnv(SeededTasks, Env):
         return v / (np.linalg.norm(v) or 1.0)
 
     def relabel(self, task: Task, actions: list[str]) -> tuple[Task, list[str]] | None:
-        """Hindsight: wherever the boxes ended up become the targets, if the attempt pushed anything."""
+        """Hindsight: wherever the boxes ended up become the targets, if the attempt pushed anything and
+        left no box cornered: on a real level that push is the deadlock, so it is never a goal to imitate."""
         w = self._start(task)
         player, boxes, states = w.player, w.boxes, []
         for a in actions:
             player, boxes = move(w.walls, player, boxes, a)
             states.append(boxes)
-        if boxes == w.boxes:
+        if boxes == w.boxes or any(cornered(w.walls, b, w.targets) for b in boxes):
             return None
         cut = states.index(boxes) + 1               # the episode ends the first time the boxes sit there
         return replace(task, goal=tuple(f"{r},{c}" for r, c in sorted(boxes))), list(actions[:cut])

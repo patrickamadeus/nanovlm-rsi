@@ -10,14 +10,13 @@ from envs.base import Env, Task
 from utils.prompt import load_scaffold, parse_turn, render
 
 SYSTEM = "You are an agent acting in a visual environment. Look at the image and reach the goal."
-PARSE_FAIL_SHAPING = -0.01     # recorded per step, kept out of total_reward so judges see raw env signal
 
 
 @dataclass(frozen=True)
 class Trajectory:
     task: Task
     steps: list[dict]          # one dict per turn; actions [] means a parse failure, a wasted turn
-    total_reward: float        # unmodified environment reward — shaping is kept out of it
+    total_reward: float        # unmodified environment reward; dense shaping stays per step, for the judge
     env_steps: int
     parse_fails: int
     tokens_out: int
@@ -77,16 +76,17 @@ def prompt_for(template: str, cfg: LoopConfig, env: Env, ctx: Context, obs, last
 
 def execute(env: Env, actions: list[str], budget_left: int):
     """Apply a turn's actions in order until the episode ends or the step budget runs out."""
-    total, done, done_actions, events, path, obs = 0.0, False, [], [], [], None
+    total, shaping, done, done_actions, events, path, obs = 0.0, 0.0, False, [], [], [], None
     for a in actions[:max(budget_left, 0)]:
         obs, reward, done, info = env.step(a)
         total += reward
+        shaping += info.get("shaping", 0.0)
         done_actions.append(a)
         events += list(info.get("events", []))
         path.append(info.get("pos"))
         if done:
             break
-    return obs, total, done, done_actions, events, path
+    return obs, total, done, done_actions, events, path, shaping
 
 
 def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
@@ -123,16 +123,16 @@ def rollout_group(policy, env: Env, tasks: list[Task], cfg: LoopConfig,
             if not actions:        # a failed parse is a wasted turn, never an env call
                 r["fails"] += 1
                 r["last"] = []
-                r["steps"].append({"actions": [], "reward": 0.0, "shaping": PARSE_FAIL_SHAPING, "events": [],
+                r["steps"].append({"actions": [], "reward": 0.0, "shaping": 0.0, "events": [],
                                    "pos": None, "path": [], **turn})
                 continue
-            obs, reward, done, done_actions, events, path = execute(r["env"], actions,
-                                                                    r["task"].budget - r["env_steps"])
+            obs, reward, done, done_actions, events, path, shaping = execute(r["env"], actions,
+                                                                             r["task"].budget - r["env_steps"])
             r["obs"], r["last"] = obs, done_actions
             r["env_steps"] += len(done_actions)
             r["total"] += reward
             r["done"] = done
-            r["steps"].append({"actions": done_actions, "reward": reward, "shaping": 0.0, "events": events,
+            r["steps"].append({"actions": done_actions, "reward": reward, "shaping": shaping, "events": events,
                                "pos": path[-1] if path else None, "path": path, **turn})
     wall = (time.perf_counter() - t_start) * 1000 / max(len(rows), 1)
     return [Trajectory(r["task"], r["steps"], r["total"], r["env_steps"], r["fails"], r["tout"], r["tin"],
@@ -151,10 +151,10 @@ def replay(env: Env, task: Task, steps: list[dict], cfg: LoopConfig, ctx: "Conte
         prompt = prompt_for(template, cfg, e, ctx, obs, last)
         images, seen = [*ctx.images, obs.rgb], obs.text
         acts = st.get("actions") or ([st["action"]] if st.get("action") else [])
-        new_obs, reward, done, done_actions, events, path = execute(e, acts, task.budget - n)
+        new_obs, reward, done, done_actions, events, path, shaping = execute(e, acts, task.budget - n)
         obs = new_obs if new_obs is not None else obs
         total, last, n = total + reward, done_actions, n + len(done_actions)
-        out.append({**st, "prompt": prompt, "images": images, "obs_text": seen, "reward": reward, "actions": done_actions,
+        out.append({**st, "prompt": prompt, "images": images, "obs_text": seen, "reward": reward, "shaping": shaping, "actions": done_actions,
                     "pos": path[-1] if path else None, "path": path, "events": events, "policy_version": -1})
         if done:
             break

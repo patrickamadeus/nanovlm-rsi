@@ -18,11 +18,21 @@ def test_rollout_records_one_step_per_action():
     assert tr.env_steps == 1 and tr.total_reward == 1.0 and tr.parse_fails == 0
 
 
-def test_parse_failure_becomes_noop_with_negative_shaping():
+def test_parse_failure_is_a_wasted_turn_without_shaping():
     tr = rollout(ScriptedPolicy(["no action here"]), env, gather_task, cfg)
     assert tr.parse_fails >= 1
     assert tr.steps[0]["actions"] == []
-    assert tr.steps[0]["shaping"] < 0
+    assert tr.steps[0]["shaping"] == 0.0     # VAGEN only withholds the format reward
+
+
+def test_env_shaping_is_recorded_per_turn():
+    from envs.sokoban import SokobanEnv
+    sok = SokobanEnv()
+    task = sok.tasks("train", 1, np.random.default_rng(0))[0]
+    path = sok.solve(task)
+    tr = rollout(ScriptedPolicy([f"ACT: {a}" for a in path]), sok, task, LoopConfig(max_turns=0))
+    assert tr.total_reward == 1.0
+    assert sum(st["shaping"] for st in tr.steps) == pytest.approx(-0.01 * len(path) + 0.1)
 
 
 def test_illegal_action_counts_as_parse_failure():

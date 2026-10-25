@@ -54,7 +54,9 @@ class GRPO(WeightMethod):
         kept = [(s, float(a)) for s, a in zip(batch, adv) if not np.isnan(a)]
         if not kept:
             return None
-        return {"items": [(st, a) for s, a in kept for st in s.traj.steps if st["token_ids"]],
+        # a turn that parsed to no action did nothing, so its tokens get no credit for the episode
+        return {"items": [(st, a) for s, a in kept for st in s.traj.steps
+                          if st["token_ids"] and (st.get("actions") or st.get("action"))],
                 "used": [s for s, _ in kept],
                 "discarded_groups": 1 - len({k for k, a in zip(keys, adv) if not np.isnan(a)}) / len(set(keys))}
 

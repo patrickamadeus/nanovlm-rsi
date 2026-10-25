@@ -154,3 +154,14 @@ def test_commit_and_revert_move_the_policy_version(setup):
     assert policy.version == v + 1
     grpo.revert(u)
     assert policy.version == v + 2
+
+
+def test_parse_failure_turns_are_not_trained(setup):
+    policy, up, _ = setup
+    batch = _batch(policy)
+    good = batch[0]
+    junk = {**good.traj.steps[0], "action": None, "actions": []}
+    t = Trajectory(good.traj.task, [junk, *good.traj.steps], 1.0, 1, 1, 0)
+    prepared = up.prepare([ScoredTrajectory(t, 1.0, None, "outcome", 1.0, ()), batch[1]])
+    assert all(st.get("actions") or st.get("action") for st, _ in prepared["items"])
+    assert len(prepared["items"]) == 2

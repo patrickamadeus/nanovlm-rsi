@@ -44,14 +44,16 @@ def hack_flags(traj: Trajectory) -> tuple[str, ...]:
 
 
 class OutcomeJudge:
-    """Never re-derives success, only reads it from the env. format_reward (VAGEN's) is added per turn whose
-    answer was well formed; success itself is always the env's total_reward."""
+    """Never re-derives success, only reads it from the env. Added on top: the env's dense shaping per step
+    (envs/sokoban.py) and format_reward (VAGEN's) per turn whose answer was well formed; success itself is
+    always the env's total_reward."""
 
     def __init__(self, format_reward: float = 0.0):
         self.format_reward = format_reward
 
     def score(self, traj: Trajectory) -> ScoredTrajectory:
         bonus = self.format_reward * sum(bool(st.get("format_ok")) for st in traj.steps)
+        bonus += sum(st.get("shaping", 0.0) for st in traj.steps)
         return ScoredTrajectory(traj, traj.total_reward + bonus, None, "outcome", 1.0, hack_flags(traj))
 
 

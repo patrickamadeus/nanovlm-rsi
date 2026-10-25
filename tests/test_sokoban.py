@@ -120,3 +120,47 @@ def test_descriptor_unit_vector_and_solver_on_trivial_level():
     assert d.ndim == 1 and abs(np.linalg.norm(d) - 1) < 1e-5
     walls = frozenset({(r, c) for r in range(4) for c in range(5) if r in (0, 3) or c in (0, 4)})
     assert solve_level(walls, (1, 1), frozenset({(1, 2)}), frozenset({(1, 3)})) == ["right"]
+
+
+def test_shaping_is_gym_sokobans_reward_over_ten_and_success_stays_one():
+    env = SokobanEnv()
+    t = _tasks(env, 1)[0]
+    env.reset(t)
+    shaping, total = [], 0.0
+    for a in env.solve(t):
+        _, r, done, info = env.step(a)
+        shaping.append(info["shaping"])
+        total += r
+    assert total == 1.0                                     # success is still read off the env reward alone
+    # -0.1 per step and +1 for the box landing on its target, scaled by gym's +10 for solving -> our 1.0
+    assert sum(shaping) == pytest.approx(-0.01 * len(shaping) + 0.1)
+
+
+def test_pushing_a_box_off_its_target_is_penalised():
+    walls = frozenset((r, c) for r in range(5) for c in range(5) if r in (0, 4) or c in (0, 4))
+    env = SokobanEnv()
+    t = _tasks(env, 1)[0]
+    env.reset(t)
+    env._world = env._world.__class__(walls, (2, 1), frozenset({(2, 2)}), frozenset({(2, 2), (1, 1)}))
+    env._player, env._boxes = (2, 1), frozenset({(2, 2)})
+    _, _, _, info = env.step("right")
+    assert info["shaping"] == pytest.approx(-0.01 - 0.1)
+
+
+def test_no_generated_box_starts_on_its_target():
+    for level in [(5, 2), (5, 3), (7, 2)]:
+        for seed in range(15):
+            w = generate(seed, *level)
+            assert not (w.boxes & w.targets), (level, seed)
+
+
+def test_relabel_refuses_a_deadlock():
+    env = SokobanEnv()
+    for t in _tasks(env, 200):
+        for a in env.actions:
+            e = env.fork()
+            e.reset(t)
+            if "deadlock" in e.step(a)[3]["events"]:
+                assert env.relabel(t, [a]) is None          # a cornered box is never a goal to imitate
+                return
+    pytest.skip("no one-step deadlock in 200 levels")

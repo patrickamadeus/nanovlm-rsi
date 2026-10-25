@@ -52,3 +52,9 @@ def test_outcome_judge_adds_vagens_per_turn_format_reward():
     t = Trajectory(TASK, steps, 1.0, 3, 0, 3)
     assert OutcomeJudge(format_reward=0.1).score(t).reward == pytest.approx(1.2)
     assert OutcomeJudge().score(t).reward == 1.0
+
+
+def test_env_shaping_is_added_to_the_reward():
+    t = Trajectory(task=TASK, steps=[{"actions": ["up"], "shaping": -0.01}, {"actions": ["up"], "shaping": 0.09}],
+                   total_reward=1.0, env_steps=2, parse_fails=0, tokens_out=0)
+    assert OutcomeJudge().score(t).reward == pytest.approx(1.08)
